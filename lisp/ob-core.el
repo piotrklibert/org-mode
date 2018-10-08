@@ -2302,7 +2302,7 @@ INFO may provide the values of these header arguments (in the
 		      (if results-switches (concat " " results-switches) ""))
 		(let ((wrap
 		       (lambda (start finish &optional no-escape no-newlines
-				 inline-start inline-finish)
+				      inline-start inline-finish)
 			 (when inline
 			   (setq start inline-start)
 			   (setq finish inline-finish)
@@ -2387,11 +2387,13 @@ INFO may provide the values of these header arguments (in the
 		    (funcall wrap "#+begin_src org" "#+end_src" nil nil
 			     "{{{results(src_org{" "})}}}"))
 		   ((member "code" result-params)
-		    (let ((lang (or lang "none")))
-		      (funcall wrap (format "#+begin_src %s%s" lang results-switches)
-			       "#+end_src" nil nil
-			       (format "{{{results(src_%s[%s]{" lang results-switches)
-			       "})}}}")))
+		    ;; TODO: support langs other than json
+		    (let ((lang (or (when (member "json" result-params) "json")
+				    (or lang "none"))))
+		      (funcall wrap
+			       (format "#+begin_src %s%s" lang results-switches) "#+end_src"
+			       nil nil
+			       (format "{{{results(src_%s[%s]{" lang results-switches) "})}}}")))
 		   ((member "raw" result-params)
 		    (goto-char beg) (when (org-at-table-p) (org-cycle)))
 		   ((or (member "drawer" result-params)
