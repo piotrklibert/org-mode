@@ -8790,6 +8790,8 @@ to read."
 (setcdr (nthcdr (1- org-mark-ring-length) org-mark-ring)
 	org-mark-ring)
 
+(defvar org-mark-ring-verbose-p nil)
+
 (defun org-mark-ring-push (&optional pos buffer)
   "Put the current position into the mark ring and rotate it.
 Also push position into the Emacs mark ring.  If optional
@@ -8801,9 +8803,10 @@ argument POS and BUFFER are not nil, mark this location instead."
       (org-with-point-at pos (push-mark nil t)))
     (setq org-mark-ring (nthcdr (1- org-mark-ring-length) org-mark-ring))
     (move-marker (car org-mark-ring) pos buffer))
-  (message
-   (substitute-command-keys
-    "Position saved to mark ring, go back with `\\[org-mark-ring-goto]'.")))
+  (when org-mark-ring-verbose-p
+    (message
+     (substitute-command-keys
+      "Position saved to mark ring, go back with `\\[org-mark-ring-goto]'."))))
 
 (defun org-mark-ring-goto (&optional n)
   "Jump to the previous position in the mark ring.
