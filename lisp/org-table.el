@@ -170,7 +170,7 @@ table, obtained by prompting the user."
   :type 'string)
 
 (defcustom org-table-number-regexp
-  "^\\([<>]?[-+^.0-9]*[0-9][-+^.0-9eEdDx()%:]*\\|[<>]?[-+]?0[xX][0-9a-fA-F.]+\\|[<>]?[-+]?[0-9]+#[0-9a-zA-Z.]+\\|nan\\|[-+u]?inf\\)$"
+  "^\\([<>]?[-+^.0-9]*[0-9][-+^.0-9eEdDx()%:]*\\|[<>]?[-+]?0[xX][[:xdigit:].]+\\|[<>]?[-+]?[0-9]+#[0-9a-zA-Z.]+\\|nan\\|[-+u]?inf\\)$"
   "Regular expression for recognizing numbers in table columns.
 If a table column contains mostly numbers, it will be aligned to the
 right.  If not, it will be aligned to the left.
@@ -195,9 +195,9 @@ Other options offered by the customize interface are more restrictive."
 	  (const :tag "Exponential, Floating point, Integer"
 		 "^[-+]?[0-9.]+\\([eEdD][-+0-9]+\\)?$")
 	  (const :tag "Very General Number-Like, including hex and Calc radix"
-		 "^\\([<>]?[-+^.0-9]*[0-9][-+^.0-9eEdDx()%]*\\|[<>]?[-+]?0[xX][0-9a-fA-F.]+\\|[<>]?[-+]?[0-9]+#[0-9a-zA-Z.]+\\|nan\\|[-+u]?inf\\)$")
+		 "^\\([<>]?[-+^.0-9]*[0-9][-+^.0-9eEdDx()%]*\\|[<>]?[-+]?0[xX][[:xdigit:].]+\\|[<>]?[-+]?[0-9]+#[0-9a-zA-Z.]+\\|nan\\|[-+u]?inf\\)$")
 	  (const :tag "Very General Number-Like, including hex and Calc radix, allows comma as decimal mark"
-		 "^\\([<>]?[-+^.,0-9]*[0-9][-+^.0-9eEdDx()%]*\\|[<>]?[-+]?0[xX][0-9a-fA-F.]+\\|[<>]?[-+]?[0-9]+#[0-9a-zA-Z.]+\\|nan\\|[-+u]?inf\\)$")
+		 "^\\([<>]?[-+^.,0-9]*[0-9][-+^.0-9eEdDx()%]*\\|[<>]?[-+]?0[xX][[:xdigit:].]+\\|[<>]?[-+]?[0-9]+#[0-9a-zA-Z.]+\\|nan\\|[-+u]?inf\\)$")
 	  (string :tag "Regexp:")))
 
 (defcustom org-table-number-fraction 0.5
@@ -2822,7 +2822,7 @@ ARGS are passed as arguments to the `message' function.  Returns
 current time if a message is printed, otherwise returns T1.  If
 T1 is nil, always messages."
   (let ((curtime (current-time)))
-    (if (or (not t1) (< 0 (nth 1 (time-subtract curtime t1))))
+    (if (or (not t1) (org-time-less-p 1 (org-time-subtract curtime t1)))
 	(progn (apply 'message args)
 	       curtime)
       t1)))

@@ -565,7 +565,9 @@ for the duration of the command.")
 (defvar org-overriding-columns-format nil
   "When set, overrides any other format definition for the agenda.
 Don't set this, this is meant for dynamic scoping.  Set
-`org-local-columns-format' instead.")
+`org-columns-default-format' and `org-columns-default-format-for-agenda'
+instead.  You should use this variable only in the local settings
+section for a custom agenda view.")
 
 (defvar-local org-local-columns-format nil
   "When set, overrides any other format definition for the agenda.
@@ -1112,7 +1114,7 @@ as a canonical duration, i.e., using units defined in
   (cond
    ((string-match-p org-ts-regexp s)
     (/ (- org-columns--time
-	  (float-time (apply #'encode-time (org-parse-time-string s))))
+	  (float-time (org-time-string-to-time s)))
        60))
    ((org-duration-p s) (org-duration-to-minutes s t)) ;skip user units
    (t (user-error "Invalid age: %S" s))))
@@ -1566,6 +1568,7 @@ PARAMS is a property list of parameters:
 	  (cond
 	   ((bound-and-true-p org-overriding-columns-format))
 	   ((bound-and-true-p org-local-columns-format))
+	   ((bound-and-true-p org-columns-default-format-for-agenda))
 	   ((let ((m (org-get-at-bol 'org-hd-marker)))
 	      (and m
 		   (or (org-entry-get m "COLUMNS" t)

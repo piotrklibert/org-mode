@@ -161,7 +161,7 @@ type         The type of entry.  Valid types are:
                            first plain list at the target
                            location.
                checkitem   a checkbox item.  This differs from the
-                           plain list item only is so far as it uses a
+                           plain list item only in so far as it uses a
                            different default template.
                table-line  a new line in the first table at target location.
                plain       text to be inserted as it is.
@@ -1018,9 +1018,9 @@ Store them in the capture property list."
 			      (not (= (time-to-days prompt-time) (org-today))))
 			 ;; Use 00:00 when no time is given for another
 			 ;; date than today?
-			 (apply #'encode-time
-				(append `(0 0 ,org-extend-today-until)
-					(cl-cdddr (decode-time prompt-time)))))
+			 (apply #'encode-time 0 0
+				org-extend-today-until
+				(cl-cdddr (decode-time prompt-time))))
 			((string-match "\\([^ ]+\\)--?[^ ]+[ ]+\\(.*\\)"
 				       org-read-date-final-answer)
 			 ;; Replace any time range by its start.
@@ -1571,7 +1571,7 @@ The template may still contain \"%?\" for cursor positioning."
 		  (replace-match "[[\\1][%^{Link description}]]" nil nil v-a)
 		v-a))
 	 (v-l (if (and v-a (string-match l-re v-a))
-		  (replace-match "\\1" nil nil v-a)
+		  (replace-match "[[\\1]]" nil nil v-a)
 		v-a))
 	 (v-n user-full-name)
 	 (v-k (if (marker-buffer org-clock-marker)
@@ -1625,7 +1625,7 @@ The template may still contain \"%?\" for cursor positioning."
       ;; Mark %() embedded elisp for later evaluation.
       (org-capture-expand-embedded-elisp 'mark)
       ;; Expand non-interactive templates.
-      (let ((regexp "%\\(:[-a-za-z]+\\|<\\([^>\n]+\\)>\\|[aAcfFikKlntTuUx]\\)"))
+      (let ((regexp "%\\(:[-A-Za-z]+\\|<\\([^>\n]+\\)>\\|[aAcfFikKlntTuUx]\\)"))
 	(save-excursion
 	  (while (re-search-forward regexp nil t)
 	    ;; `org-capture-escaped-%' may modify buffer and cripple

@@ -174,7 +174,7 @@ export file for all source blocks.  Optional argument LANG can be
 used to limit the exported source code blocks by language.
 Return a list whose CAR is the tangled file name."
   (interactive "fFile to tangle: \nP")
-  (let ((visited-p (get-file-buffer (expand-file-name file)))
+  (let ((visited-p (find-buffer-visiting (expand-file-name file)))
 	to-be-removed)
     (prog1
 	(save-window-excursion
@@ -228,13 +228,7 @@ used to limit the exported source code blocks by language."
 	   (let* ((lang (car by-lang))
 		  (specs (cdr by-lang))
 		  (ext (or (cdr (assoc lang org-babel-tangle-lang-exts)) lang))
-		  (lang-f (intern
-			   (concat
-			    (or (and (cdr (assoc lang org-src-lang-modes))
-				     (symbol-name
-				      (cdr (assoc lang org-src-lang-modes))))
-				lang)
-			    "-mode")))
+		  (lang-f (org-src-get-lang-mode lang))
 		  she-banged)
 	     (mapc
 	      (lambda (spec)
@@ -494,14 +488,17 @@ non-nil, return the full association list to be used by
       result)))
 
 (defun org-babel-tangle-comment-links (&optional info)
-  "Return a list of begin and end link comments for the code block at point."
-  (let ((link-data
-	 `(("start-line" . ,(number-to-string
-			     (org-babel-where-is-src-block-head)))
-	   ("file" . ,(buffer-file-name))
-	   ("link" . ,(org-no-properties (org-store-link nil)))
-	   ("source-name" .
-	    ,(nth 4 (or info (org-babel-get-src-block-info 'light)))))))
+  "Return a list of begin and end link comments for the code block at point.
+INFO, when non nil, is the source block information, as returned
+by `org-babel-get-src-block-info'."
+  (let ((link-data (pcase (or info (org-babel-get-src-block-info 'light))
+		     (`(,_ ,_ ,_ ,_ ,name ,start ,_)
+		      `(("start-line" . ,(org-with-point-at start
+					   (number-to-string
+					    (line-number-at-pos))))
+			("file" . ,(buffer-file-name))
+			("link" . ,(org-no-properties (org-store-link nil)))
+			("source-name" . ,name))))))
     (list (org-fill-template org-babel-tangle-comment-format-beg link-data)
 	  (org-fill-template org-babel-tangle-comment-format-end link-data))))
 

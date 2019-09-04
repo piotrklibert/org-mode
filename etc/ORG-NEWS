@@ -123,6 +123,11 @@ auto-commit attachments to git:
   one need to require the =org-attach-git= module in the startup.
 
 ** New features
+*** Add split-window-right option for src block edit window placement
+Given the increasing popularity of wide screen monitors, splitting
+horizontally may make more sense than splitting vertically.  An
+option, ~split-window-right~, to request horizontal splitting has been
+added to ~org-src-window-setup~.
 *** Org-Attach has been refactored and extended
 Org attach has been refactored and the functionality extended.  It
 should now be easier to understand how it works.  A few improvements
@@ -329,7 +334,11 @@ dynamic block in ~org-dynamic-block-alist~.
 *** ~org-table-cell-left~
 *** ~org-table-cell-right~
 *** ~org-habit-toggle-display-in-agenda~
-** Removed functions
+** Removed functions and variables
+*** Removed Org Drill
+
+You can install it back from MELPA.
+
 *** ~org-babel-set-current-result-hash~
 *** ~org-capture-insert-template-here~
 *** ~org-attach-directory~
@@ -337,6 +346,8 @@ dynamic block in ~org-dynamic-block-alist~.
 It has been deprecated in favour of ~org-attach-id-dir~ which is less
 ambigous given the restructured org-attach.
 
+*** ~org-enable-fixed-width-editor~
+This variable was not used throught the code base.
 ** Miscellaneous
 *** Change signature for ~org-list-to-subtree~
 The function now accepts the level of the subtree as an optional
@@ -382,6 +393,28 @@ separator using ~org-agenda-breadcrumbs-separator~.
 
 This variable makes it possible to customize the list of commands for
 the attachment dispatcher.
+
+*** New ID method based on timestamp
+If one chooses, it is now possible to create ID's based on timestamp
+(ISO8601) instead of UUID by changing org-id-method to ts.
+
+*** New customization: ~org-id-locations-relative~
+New customization to make the persisting of org-id-locations between
+sessions to store links to files as relative instead of absolute.  The
+links will be stored as relative to the path of org-id-locations-file.
+
+*** ~org-ctrl-c-tab~ is functional before the first headline
+
+I.e. treat the whole file as if it was a subtree.
+
+Also fold everything below the chosen level.  Former behavior was to
+leave unfolded subtrees unfolded.
+
+*** ~org-kill-note-or-show-branches~ is functional before the first headline
+
+I.e. treat the whole file as if it was a subtree.
+
+*** Respect narrowing when agenda command is restricted to buffer
 
 * Version 9.2
 ** Incompatible changes

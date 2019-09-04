@@ -973,7 +973,7 @@ Return value is a plist."
 Return a list whose CAR is `headline' and CDR is a plist
 containing `:raw-value', `:title', `:begin', `:end',
 `:pre-blank', `:contents-begin' and `:contents-end', `:level',
-`:priority', `:tags', `:todo-keyword',`:todo-type', `:scheduled',
+`:priority', `:tags', `:todo-keyword', `:todo-type', `:scheduled',
 `:deadline', `:closed', `:archivedp', `:commentedp'
 `:footnote-section-p', `:post-blank' and `:post-affiliated'
 keywords.
@@ -2879,7 +2879,7 @@ Assume point is at the beginning of the snippet."
 
 When at a footnote reference, return a list whose car is
 `footnote-reference' and cdr a plist with `:label', `:type',
-`:begin', `:end', `:content-begin', `:contents-end' and
+`:begin', `:end', `:contents-begin', `:contents-end' and
 `:post-blank' as keywords.  Otherwise, return nil."
   (when (looking-at org-footnote-re)
     (let ((closing (with-syntax-table org-element--pair-square-table
@@ -4868,13 +4868,13 @@ you want to help debugging the issue.")
 (defvar org-element-cache-sync-idle-time 0.6
   "Length, in seconds, of idle time before syncing cache.")
 
-(defvar org-element-cache-sync-duration (seconds-to-time 0.04)
+(defvar org-element-cache-sync-duration 0.04
   "Maximum duration, as a time value, for a cache synchronization.
 If the synchronization is not over after this delay, the process
 pauses and resumes after `org-element-cache-sync-break'
 seconds.")
 
-(defvar org-element-cache-sync-break (seconds-to-time 0.3)
+(defvar org-element-cache-sync-break 0.3
   "Duration, as a time value, of the pause between synchronizations.
 See `org-element-cache-sync-duration' for more information.")
 
@@ -5156,7 +5156,7 @@ Assume ELEMENT belongs to cache and that a cache is active."
   (setq org-element--cache-sync-timer
 	(run-with-idle-timer
 	 (let ((idle (current-idle-time)))
-	   (if idle (time-add idle org-element-cache-sync-break)
+	   (if idle (org-time-add idle org-element-cache-sync-break)
 	     org-element-cache-sync-idle-time))
 	 nil
 	 #'org-element--cache-sync
@@ -5167,7 +5167,7 @@ Assume ELEMENT belongs to cache and that a cache is active."
 TIME-LIMIT is a time value or nil."
   (and time-limit
        (or (input-pending-p)
-	   (time-less-p time-limit (current-time)))))
+	   (org-time-less-p time-limit nil))))
 
 (defsubst org-element--cache-shift-positions (element offset &optional props)
   "Shift ELEMENT properties relative to buffer positions by OFFSET.
@@ -5221,11 +5221,8 @@ updated before current modification are actually submitted."
 	     (and next (aref next 0))
 	     threshold
 	     (and (not threshold)
-		  ;; NOTE: Here and in other `time-add' calls, we use
-		  ;; (current-time) rather than nil for Emacs 24
-		  ;; compatibility.
-		  (time-add (current-time)
-			    org-element-cache-sync-duration))
+		  (org-time-add nil
+				org-element-cache-sync-duration))
 	     future-change)
 	    ;; Request processed.  Merge current and next offsets and
 	    ;; transfer ending position.

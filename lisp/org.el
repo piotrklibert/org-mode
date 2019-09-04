@@ -708,7 +708,6 @@ For export specific modules, see also `org-export-backends'."
 	(const :tag "C  choose:            Use TODO keywords to mark decisions states" org-choose)
 	(const :tag "C  collector:         Collect properties into tables" org-collector)
 	(const :tag "C  depend:            TODO dependencies for Org mode\n\t\t\t(PARTIALLY OBSOLETE, see built-in dependency support))" org-depend)
-	(const :tag "C  drill:             Flashcards and spaced repetition for Org mode" org-drill)
 	(const :tag "C  elisp-symbol:      Links to emacs-lisp symbols" ol-elisp-symbol)
 	(const :tag "C  eval-light:        Evaluate inbuffer-code on demand" org-eval-light)
 	(const :tag "C  eval:              Include command output as text" org-eval)
@@ -1699,13 +1698,6 @@ make an intelligent decision whether to insert a blank line or not."
   :group 'org-edit-structure
   :type 'hook)
 
-(defcustom org-enable-fixed-width-editor t
-  "Non-nil means lines starting with \":\" are treated as fixed-width.
-This currently only means they are never auto-wrapped.
-When nil, such lines will be treated like ordinary lines."
-  :group 'org-edit-structure
-  :type 'boolean)
-
 (defgroup org-sparse-trees nil
   "Options concerning sparse trees in Org mode."
   :tag "Org Sparse Trees"
@@ -2118,31 +2110,35 @@ more information."
   :type '(choice (const sequence)
 		 (const type)))
 
-(defcustom org-use-fast-todo-selection t
+(defcustom org-use-fast-todo-selection 'auto
   "\\<org-mode-map>\
 Non-nil means use the fast todo selection scheme with `\\[org-todo]'.
 This variable describes if and under what circumstances the cycling
 mechanism for TODO keywords will be replaced by a single-key, direct
-selection scheme.
+selection scheme, where the choices are displayed in a little window.
 
-When nil, fast selection is never used.
+When nil, fast selection is never used.  This means that the command
+will always switch to the next state.
 
-When the symbol `prefix', it will be used when `org-todo' is called
-with a prefix argument,  i.e. `\\[universal-argument] \\[org-todo]' \
-in an Org buffer, and
-`\\[universal-argument] t' in an agenda buffer.
+When it is the symbol `auto', fast selection is whenever selection
+keys have been defined.
 
-When t, fast selection is used by default.  In this case, the prefix
-argument forces cycling instead.
+`expert' is like `auto', but no special window with the keyword
+will be shown, choices will only be listed in the prompt.
 
 In all cases, the special interface is only used if access keys have
 actually been assigned by the user, i.e. if keywords in the configuration
 are followed by a letter in parenthesis, like TODO(t)."
   :group 'org-todo
+  :set (lambda (var val)
+	 (cond
+	  ((eq var t) (set var 'auto))
+	  ((eq var 'prefix) (set var nil))
+	  (t (set var val))))
   :type '(choice
 	  (const :tag "Never" nil)
-	  (const :tag "By default" t)
-	  (const :tag "Only with C-u C-c C-t" prefix)))
+	  (const :tag "Automatically, when key letter have been defined" auto)
+	  (const :tag "Automatically, but don't show the selection window" expert)))
 
 (defcustom org-provide-todo-statistics t
   "Non-nil means update todo statistics after insert and toggle.
@@ -3143,6 +3139,18 @@ This variable can be set on the per-file basis by inserting a line
   :group 'org-properties
   :type 'string)
 
+(defcustom org-columns-default-format-for-agenda nil
+  "The default column format in an agenda buffer.
+Whis will be used for column view in the agenda unless a format has
+been set by adding `org-overriding-columns-format' to the local
+settings list of a custom agenda view.  When nil, the columns format
+for the first item in the agenda list will be used, or as a fall-back,
+`org-columns-default-format'."
+  :group 'org-properties
+  :type '(choice
+	  (const :tag "No default" nil)
+	  (string :tag "Format string")))
+
 (defcustom org-columns-ellipses ".."
   "The ellipses to be used when a field in column view is truncated.
 When this is the empty string, as many characters as possible are shown,
@@ -3679,6 +3687,13 @@ Changing this variable requires a restart of Emacs to take effect."
   "Non-nil means fontify the whole line for headings.
 This is useful when setting a background color for the
 org-level-* faces."
+  :group 'org-appearance
+  :type 'boolean)
+
+(defcustom org-fontify-whole-block-delimiter-line t
+  "Non-nil means fontify the whole line for begin/end lines of blocks.
+This is useful when setting a background color for the
+org-block-begin-line and org-block-end-line faces."
   :group 'org-appearance
   :type 'boolean)
 
@@ -4972,22 +4987,20 @@ When ROUNDING-MINUTES is not an integer, fall back on the car of
 the rounding returns a past time."
   (let ((r (or (and (integerp rounding-minutes) rounding-minutes)
 	       (car org-time-stamp-rounding-minutes)))
-	(time (decode-time)) res)
+	(now (current-time)))
     (if (< r 1)
-	(current-time)
-      (setq res
-	    (apply 'encode-time
-		   (append (list 0 (* r (floor (+ .5 (/ (float (nth 1 time)) r)))))
-			   (nthcdr 2 time))))
-      (if (and past (< (float-time (time-subtract (current-time) res)) 0))
-	  (seconds-to-time (- (float-time res) (* r 60)))
-	res))))
+	now
+      (let* ((time (decode-time now))
+	     (res (apply #'encode-time 0 (* r (round (nth 1 time) r))
+			 (nthcdr 2 time))))
+	(if (or (not past) (org-time-less-p res now))
+	    res
+	  (org-time-subtract res (* r 60)))))))
 
 (defun org-today ()
   "Return today date, considering `org-extend-today-until'."
   (time-to-days
-   (time-subtract (current-time)
-		  (list 0 (* 3600 org-extend-today-until) 0))))
+   (org-time-since (* 3600 org-extend-today-until))))
 
 ;;;; Font-Lock stuff, including the activators
 
@@ -5239,57 +5252,64 @@ by a #."
 	   "^\\([ \t]*#\\(\\(\\+[a-zA-Z]+:?\\| \\|$\\)\\(_\\([a-zA-Z]+\\)\\)?\\)[ \t]*\\(\\([^ \t\n]*\\)[ \t]*\\(.*\\)\\)\\)"
 	   limit t)
       (let ((beg (match-beginning 0))
-	    (block-start (match-end 0))
-	    (block-end nil)
-	    (lang (match-string 7))
-	    (beg1 (line-beginning-position 2))
+	    (end-of-beginline (match-end 0))
+	    (block-start (match-end 0))  ; includes the \n at end of #+begin line
+	    (block-end nil)              ; will include \n after end of block content
+	    (lang (match-string 7))      ; the language, if it is an src block
+	    (bol-after-beginline (line-beginning-position 2))
 	    (dc1 (downcase (match-string 2)))
 	    (dc3 (downcase (match-string 3)))
-	    end end1 quoting block-type)
+	    (whole-blockline org-fontify-whole-block-delimiter-line)
+	    beg-of-endline end-of-endline nl-before-endline quoting block-type)
 	(cond
 	 ((and (match-end 4) (equal dc3 "+begin"))
 	  ;; Truly a block
 	  (setq block-type (downcase (match-string 5))
-		quoting (member block-type org-protecting-blocks))
+		quoting (member block-type org-protecting-blocks)) ; src, example, export, maybe more
 	  (when (re-search-forward
 		 (concat "^[ \t]*#\\+end" (match-string 4) "\\>.*")
 		 nil t)  ;; on purpose, we look further than LIMIT
-	    (setq end (min (point-max) (match-end 0))
-		  end1 (min (point-max) (1- (match-beginning 0))))
-	    (setq block-end (match-beginning 0))
+	    ;; We do have a matching #+end line
+	    (setq beg-of-endline (match-beginning 0)
+		  end-of-endline (match-end 0)
+		  nl-before-endline (1- (match-beginning 0)))
+	    (setq block-end (match-beginning 0)) ; includes the final newline.
 	    (when quoting
-	      (org-remove-flyspell-overlays-in beg1 end1)
-	      (remove-text-properties beg end
+	      (org-remove-flyspell-overlays-in bol-after-beginline nl-before-endline)
+	      (remove-text-properties beg end-of-endline
 				      '(display t invisible t intangible t)))
 	    (add-text-properties
-	     beg end '(font-lock-fontified t font-lock-multiline t))
-	    (add-text-properties beg beg1 '(face org-meta-line))
-	    (org-remove-flyspell-overlays-in beg beg1)
-	    (add-text-properties	; For end_src
-	     end1 (min (point-max) (1+ end)) '(face org-meta-line))
-	    (org-remove-flyspell-overlays-in end1 end)
+	     beg end-of-endline '(font-lock-fontified t font-lock-multiline t))
+	    (org-remove-flyspell-overlays-in beg bol-after-beginline)
+	    (org-remove-flyspell-overlays-in nl-before-endline end-of-endline)
 	    (cond
 	     ((and lang (not (string= lang "")) org-src-fontify-natively)
 	      (org-src-font-lock-fontify-block lang block-start block-end)
-	      (add-text-properties beg1 block-end '(src-block t)))
+	      (add-text-properties bol-after-beginline block-end '(src-block t)))
 	     (quoting
-	      (add-text-properties beg1 (min (point-max) (1+ end1))
-				   (list 'face
-					 (list :inherit
-					       (let ((face-name
-						      (intern (format "org-block-%s" lang))))
-						 (append (and (facep face-name) (list face-name))
-							 '(org-block))))))) ; end of source block
+	      (add-text-properties
+	       bol-after-beginline beg-of-endline
+	       (list 'face
+		     (list :inherit
+			   (let ((face-name
+				  (intern (format "org-block-%s" lang))))
+			     (append (and (facep face-name) (list face-name))
+				     '(org-block)))))))
 	     ((not org-fontify-quote-and-verse-blocks))
 	     ((string= block-type "quote")
 	      (add-face-text-property
-	       beg1 (min (point-max) (1+ end1)) 'org-quote t))
+	       bol-after-beginline beg-of-endline 'org-quote t))
 	     ((string= block-type "verse")
 	      (add-face-text-property
-	       beg1 (min (point-max) (1+ end1)) 'org-verse t)))
-	    (add-text-properties beg beg1 '(face org-block-begin-line))
-	    (add-text-properties (min (point-max) (1+ end)) (min (point-max) (1+ end1))
-				 '(face org-block-end-line))
+	       bol-after-beginline beg-of-endline 'org-verse t)))
+	    ;; Fontify the #+begin and #+end lines of the blocks
+	    (add-text-properties
+	     beg (if whole-blockline bol-after-beginline end-of-beginline)
+	     '(face org-block-begin-line))
+	    (add-text-properties
+	     beg-of-endline
+	     (min (point-max) (if whole-blockline (min (point-max) (1+ end-of-endline)) end-of-endline))
+	     '(face org-block-end-line))
 	    t))
 	 ((member dc1 '("+title:" "+author:" "+email:" "+date:"))
 	  (org-remove-flyspell-overlays-in
@@ -5319,6 +5339,7 @@ by a #."
 			       '(font-lock-fontified t face org-block))
 	  t)
 	 ((member dc3 '(" " ""))
+	  ; Just a comment, the plus was not there
 	  (org-remove-flyspell-overlays-in beg (match-end 0))
 	  (add-text-properties
 	   beg (match-end 0)
@@ -6084,28 +6105,33 @@ a list of strings specifying which drawers should not be hidden."
 		;; `org-drawer-regexp'.
 		(goto-char (org-element-property :end drawer))))))))))
 
-(defun org-flag-drawer (flag &optional element)
+(defun org-flag-drawer (flag &optional element beg end)
   "When FLAG is non-nil, hide the drawer we are at.
-Otherwise make it visible.  When optional argument ELEMENT is
-a parsed drawer, as returned by `org-element-at-point', hide or
-show that drawer instead."
-  (let ((drawer (or element
-		    (and (save-excursion
-			   (beginning-of-line)
-			   (looking-at-p org-drawer-regexp))
-			 (org-element-at-point)))))
-    (when (memq (org-element-type drawer) '(drawer property-drawer))
-      (let ((post (org-element-property :post-affiliated drawer)))
-	(org-flag-region
-	 (save-excursion (goto-char post) (line-end-position))
-	 (save-excursion (goto-char (org-element-property :end drawer))
-			 (skip-chars-backward " \t\n")
-			 (line-end-position))
-	 flag 'org-hide-drawer)
-	;; When the drawer is hidden away, make sure point lies in
-	;; a visible part of the buffer.
-	(when (invisible-p (max (1- (point)) (point-min)))
-	  (goto-char post))))))
+Otherwise make it visible.
+
+When optional argument ELEMENT is a parsed drawer, as returned by
+`org-element-at-point', hide or show that drawer instead.
+
+When buffer positions BEG and END are provided, hide or show that
+region as a drawer without further ado."
+  (if (and beg end) (org-flag-region beg end flag 'org-hide-drawer)
+    (let ((drawer (or element
+		      (and (save-excursion
+			     (beginning-of-line)
+			     (looking-at-p org-drawer-regexp))
+			   (org-element-at-point)))))
+      (when (memq (org-element-type drawer) '(drawer property-drawer))
+	(let ((post (org-element-property :post-affiliated drawer)))
+	  (org-flag-region
+	   (save-excursion (goto-char post) (line-end-position))
+	   (save-excursion (goto-char (org-element-property :end drawer))
+			   (skip-chars-backward " \t\n")
+			   (line-end-position))
+	   flag 'org-hide-drawer)
+	  ;; When the drawer is hidden away, make sure point lies in
+	  ;; a visible part of the buffer.
+	  (when (invisible-p (max (1- (point)) (point-min)))
+	    (goto-char post)))))))
 
 ;;;; Visibility cycling
 
@@ -8112,6 +8138,7 @@ function is being called interactively."
 			      "(empty for default `sort-subr' predicate): ")
 		      'allow-empty))))
 	   ((member dcst '(?p ?t ?s ?d ?c ?k)) '<))))
+	(org-cycle-hide-drawers 'all)
 	(when restore-clock?
 	  (move-marker org-clock-marker
 		       (1+ (next-single-property-change
@@ -9983,15 +10010,20 @@ By default the available states are \"TODO\" and \"DONE\".  So, for this
 example: when the item starts with TODO, it is changed to DONE.
 When it starts with DONE, the DONE is removed.  And when neither TODO nor
 DONE are present, add TODO at the beginning of the heading.
+You can set up single-charcter keys to fast-select the new state.  See the
+`org-todo-keywords' and `org-use-fast-todo-selection' for details.
 
-With `\\[universal-argument]' prefix ARG, use completion to determine the new \
-state.
-With numeric prefix ARG, switch to that state.
+With `\\[universal-argument]' prefix ARG, force logging the state change \
+and take a
+logging note.
 With a `\\[universal-argument] \\[universal-argument]' prefix, switch to the \
 next set of TODO \
 keywords (nextset).
+Another way to achieve this is `S-C-<right>'.
 With a `\\[universal-argument] \\[universal-argument] \\[universal-argument]' \
 prefix, circumvent any state blocking.
+With numeric prefix arg, switch to the Nth state.
+
 With a numeric prefix arg of 0, inhibit note taking for the change.
 With a numeric prefix arg of -1, cancel repeater to allow marking as DONE.
 
@@ -10034,6 +10066,7 @@ When called through ELisp, arg is also interpreted in the following way:
 	      (looking-at "\\(?: *\\|[ \t]*$\\)"))
 	  (let* ((match-data (match-data))
 		 (startpos (copy-marker (line-beginning-position)))
+		 (force-log (and  (equal arg '(4)) (prog1 t (setq arg nil))))
 		 (logging (save-match-data (org-entry-get nil "LOGGING" t t)))
 		 (org-log-done org-log-done)
 		 (org-log-repeat org-log-repeat)
@@ -10053,34 +10086,19 @@ When called through ELisp, arg is also interpreted in the following way:
 		 (member (member this org-todo-keywords-1))
 		 (tail (cdr member))
 		 (org-state (cond
-			     ((and org-todo-key-trigger
-				   (or (and (equal arg '(4))
-					    (eq org-use-fast-todo-selection 'prefix))
-				       (and (not arg) org-use-fast-todo-selection
-					    (not (eq org-use-fast-todo-selection
-						     'prefix)))))
-			      ;; Use fast selection.
-			      (org-fast-todo-selection))
-			     ((and (equal arg '(4))
-				   (or (not org-use-fast-todo-selection)
-				       (not org-todo-key-trigger)))
-			      ;; Read a state with completion.
-			      (completing-read
-			       "State: " (mapcar #'list org-todo-keywords-1)
-			       nil t))
 			     ((eq arg 'right)
+			      ;; Next state
 			      (if this
 				  (if tail (car tail) nil)
 				(car org-todo-keywords-1)))
 			     ((eq arg 'left)
+			      ;; Previous state
 			      (unless (equal member org-todo-keywords-1)
 				(if this
 				    (nth (- (length org-todo-keywords-1)
 					    (length tail) 2)
 					 org-todo-keywords-1)
 				  (org-last org-todo-keywords-1))))
-			     ((and (eq org-use-fast-todo-selection t) (equal arg '(4))
-				   (setq arg nil))) ;hack to fall back to cycling
 			     (arg
 			      ;; User or caller requests a specific state.
 			      (cond
@@ -10099,6 +10117,9 @@ When called through ELisp, arg is also interpreted in the following way:
 				(user-error "State `%s' not valid in this file" arg))
 			       ((nth (1- (prefix-numeric-value arg))
 				     org-todo-keywords-1))))
+			     ((and org-todo-key-trigger org-use-fast-todo-selection)
+			      ;; Use fast selection.
+			      (org-fast-todo-selection this))
 			     ((null member) (or head (car org-todo-keywords-1)))
 			     ((equal this final-done-word) nil) ;-> make empty
 			     ((null tail) nil) ;-> first entry
@@ -10160,11 +10181,13 @@ When called through ELisp, arg is also interpreted in the following way:
 	    (setq now-done-p (and (member org-state org-done-keywords)
 				  (not (member this org-done-keywords))))
 	    (and logging (org-local-logging logging))
-	    (when (and (or org-todo-log-states org-log-done)
-		       (not (eq org-inhibit-logging t))
-		       (not (memq arg '(nextset previousset))))
+	    (when (or (and (or org-todo-log-states org-log-done)
+			   (not (eq org-inhibit-logging t))
+			   (not (memq arg '(nextset previousset))))
+		      force-log)
 	      ;; We need to look at recording a time and note.
-	      (setq dolog (or (nth 1 (assoc org-state org-todo-log-states))
+	      (setq dolog (or (if force-log 'note)
+			      (nth 1 (assoc org-state org-todo-log-states))
 			      (nth 2 (assoc this org-todo-log-states))))
 	      (when (and (eq dolog 'note) (eq org-inhibit-logging 'note))
 		(setq dolog 'time))
@@ -10209,7 +10232,9 @@ When called through ELisp, arg is also interpreted in the following way:
 				       (looking-at org-todo-line-regexp))
 		       (< (point) (+ 2 (or (match-end 2) (match-end 1)))))
 	      (goto-char (or (match-end 2) (match-end 1)))
-	      (and (looking-at " ") (just-one-space)))
+	      (and (looking-at " ")
+		   (not (looking-at " *:"))
+		   (just-one-space)))
 	    (when org-trigger-hook
 	      (save-excursion
 		(run-hook-with-args 'org-trigger-hook change-plist)))
@@ -10566,25 +10591,31 @@ right sequence."
       (car org-todo-keywords-1))
      (t (nth 2 (assoc kwd org-todo-kwd-alist))))))
 
-(defun org-fast-todo-selection ()
+(defun org-fast-todo-selection (&optional current-state)
   "Fast TODO keyword selection with single keys.
-Returns the new TODO keyword, or nil if no state change should occur."
+Returns the new TODO keyword, or nil if no state change should occur.
+When CURRENT-STATE is given and selection letters are not unique globally,
+prefer a state in the current sequence over on in another sequence."
   (let* ((fulltable org-todo-key-alist)
+	 (head (org-get-todo-sequence-head current-state))
 	 (done-keywords org-done-keywords) ;; needed for the faces.
 	 (maxlen (apply 'max (mapcar
 			      (lambda (x)
 				(if (stringp (car x)) (string-width (car x)) 0))
 			      fulltable)))
-	 (expert nil)
+	 (expert (equal org-use-fast-todo-selection 'expert))
+	 (prompt "")
 	 (fwidth (+ maxlen 3 1 3))
 	 (ncol (/ (- (window-width) 4) fwidth))
-	 tg cnt e c tbl
-	 groups ingroup)
+	 tg cnt e c tbl subtable
+	 groups ingroup in-current-sequence)
     (save-excursion
       (save-window-excursion
 	(if expert
 	    (set-buffer (get-buffer-create " *Org todo*"))
-	  (org-switch-to-buffer-other-window (get-buffer-create " *Org todo*")))
+	  (delete-other-windows)
+	  (set-window-buffer (split-window-vertically) (get-buffer-create " *Org todo*"))
+	  (org-switch-to-buffer-other-window " *Org todo*"))
 	(erase-buffer)
 	(setq-local org-done-keywords done-keywords)
 	(setq tbl fulltable cnt 0)
@@ -10595,9 +10626,11 @@ Returns the new TODO keyword, or nil if no state change should occur."
 	    (unless (= cnt 0)
 	      (setq cnt 0)
 	      (insert "\n"))
+	    (setq prompt (concat prompt "{"))
 	    (insert "{ "))
 	   ((equal e '(:endgroup))
-	    (setq ingroup nil cnt 0)
+	    (setq ingroup nil cnt 0 in-current-sequence nil)
+	    (setq prompt (concat prompt "}"))
 	    (insert "}\n"))
 	   ((equal e '(:newline))
 	    (unless (= cnt 0)
@@ -10609,10 +10642,13 @@ Returns the new TODO keyword, or nil if no state change should occur."
 		(setq tbl (cdr tbl)))))
 	   (t
 	    (setq tg (car e) c (cdr e))
+	    (if (equal tg head) (setq in-current-sequence t))
 	    (when ingroup (push tg (car groups)))
+	    (when in-current-sequence (push e subtable))
 	    (setq tg (org-add-props tg nil 'face
 				    (org-get-todo-face tg)))
 	    (when (and (= cnt 0) (not ingroup)) (insert "  "))
+	    (setq prompt (concat prompt "[" (char-to-string c) "] " tg " ")) 
 	    (insert "[" c "] " tg (make-string
 				   (- fwidth 4 (length tg)) ?\ ))
 	    (when (and (= (setq cnt (1+ cnt)) ncol)
@@ -10624,14 +10660,17 @@ Returns the new TODO keyword, or nil if no state change should occur."
 	(insert "\n")
 	(goto-char (point-min))
 	(unless expert (org-fit-window-to-buffer))
-	(message "[a-z..]:Set [SPC]:clear")
+	(message (concat "[a-z..]:Set [SPC]:clear"
+			 (if expert (concat "\n" prompt) "")))
 	(setq c (let ((inhibit-quit t)) (read-char-exclusive)))
+	(setq subtable (nreverse subtable))
 	(cond
 	 ((or (= c ?\C-g)
 	      (and (= c ?q) (not (rassoc c fulltable))))
 	  (setq quit-flag t))
 	 ((= c ?\ ) nil)
-	 ((setq e (rassoc c fulltable) tg (car e))
+	 ((setq e (or (rassoc c subtable) (rassoc c fulltable))
+		tg (car e))
 	  tg)
 	 (t (setq quit-flag t)))))))
 
@@ -10794,7 +10833,7 @@ This function is run automatically after each state change to a DONE state."
 		      (let ((nshiftmax 10)
 			    (nshift 0))
 			(while (or (= nshift 0)
-				   (not (time-less-p (current-time) time)))
+				   (not (org-time-less-p nil time)))
 			  (when (= nshiftmax (cl-incf nshift))
 			    (or (y-or-n-p
 				 (format "%d repeater intervals were not \
@@ -10967,7 +11006,7 @@ for calling org-schedule with, or if there is no scheduling,
 returns nil."
   (let ((time (org-entry-get pom "SCHEDULED" inherit)))
     (when time
-      (apply 'encode-time (org-parse-time-string time)))))
+      (org-time-string-to-time time))))
 
 (defun org-get-deadline-time (pom &optional inherit)
   "Get the deadline as a time tuple, of a format suitable for
@@ -10975,7 +11014,7 @@ calling org-deadline with, or if there is no scheduling, returns
 nil."
   (let ((time (org-entry-get pom "DEADLINE" inherit)))
     (when time
-      (apply 'encode-time (org-parse-time-string time)))))
+      (org-time-string-to-time time))))
 
 (defun org-remove-timestamp-with-keyword (keyword)
   "Remove all time stamps with KEYWORD in the current entry."
@@ -11034,7 +11073,7 @@ WHAT entry will also be removed."
 				       org-deadline-time-regexp)
 				     end t)
 	      (setq ts (match-string 1)
-		    default-time (apply 'encode-time (org-parse-time-string ts))
+		    default-time (org-time-string-to-time ts)
 		    default-input (and ts (org-get-compact-tod ts)))))))
       (when what
 	(setq time
@@ -13526,7 +13565,9 @@ COLUMN formats in the current buffer."
      (delete-dups values))))
 
 (defun org-insert-property-drawer ()
-  "Insert a property drawer into the current entry."
+  "Insert a property drawer into the current entry.
+Do nothing if the drawer already exists.  The newly created
+drawer is immediately hidden."
   (org-with-wide-buffer
    (if (or (not (featurep 'org-inlinetask)) (org-inlinetask-in-task-p))
        (org-back-to-heading t)
@@ -13541,6 +13582,7 @@ COLUMN formats in the current buffer."
      (let ((begin (1+ (point)))
 	   (inhibit-read-only t))
        (insert "\n:PROPERTIES:\n:END:")
+       (org-flag-drawer t nil (line-end-position 0) (point))
        (when (eobp) (insert "\n"))
        (org-indent-region begin (point))))))
 
@@ -13977,8 +14019,7 @@ non-nil."
 	      ((org-at-timestamp-p 'lax) (match-string 0))))
 	 ;; Default time is either the timestamp at point or today.
 	 ;; When entering a range, only the range start is considered.
-         (default-time (and ts
-			    (apply #'encode-time (org-parse-time-string ts))))
+         (default-time (and ts (org-time-string-to-time ts)))
          (default-input (and ts (org-get-compact-tod ts)))
          (repeater (and ts
 			(string-match "\\([.+-]+[0-9]+[hdwmy] ?\\)+" ts)
@@ -14226,13 +14267,14 @@ user."
 		 "range representable on this machine"))
       (ding))
 
-    ;; One round trip to get rid of 34th of August and stuff like that....
-    (setq final (decode-time (apply 'encode-time final)))
+    (setq final (apply #'encode-time final))
 
     (setq org-read-date-final-answer ans)
 
     (if to-time
-	(apply 'encode-time final)
+	final
+      ;; This round-trip gets rid of 34th of August and stuff like that....
+      (setq final (decode-time final))
       (if (and (boundp 'org-time-was-given) org-time-was-given)
 	  (format "%04d-%02d-%02d %02d:%02d"
 		  (nth 5 final) (nth 4 final) (nth 3 final)
@@ -14262,7 +14304,7 @@ user."
 			  (and (boundp 'org-time-was-given) org-time-was-given))
 		      (cdr fmts)
 		    (car fmts)))
-	     (txt (format-time-string fmt (apply 'encode-time f)))
+	     (txt (format-time-string fmt (apply #'encode-time f)))
 	     (txt (if org-read-date-inactive (concat "[" (substring txt 1 -1) "]") txt))
 	     (txt (concat "=> " txt)))
 	(when (and org-end-time-was-given
@@ -14913,7 +14955,7 @@ signaled."
    (daynr (org-closest-date s daynr prefer))
    (t (time-to-days
        (condition-case errdata
-	   (apply #'encode-time (org-parse-time-string s))
+	   (org-time-string-to-time s)
 	 (error (error "Bad timestamp `%s'%s\nError was: %s"
 		       s
 		       (if (not (and buffer pos)) ""
@@ -15011,12 +15053,12 @@ stamp stay unchanged.  In any case, return value is an absolute
 day number."
   (if (not (string-match "\\+\\([0-9]+\\)\\([hdwmy]\\)" start))
       ;; No repeater.  Do not shift time stamp.
-      (time-to-days (apply #'encode-time (org-parse-time-string start)))
+      (time-to-days (org-time-string-to-time start))
     (let ((value (string-to-number (match-string 1 start)))
 	  (type (match-string 2 start)))
       (if (= 0 value)
 	  ;; Repeater with a 0-value is considered as void.
-	  (time-to-days (apply #'encode-time (org-parse-time-string start)))
+	  (time-to-days (org-time-string-to-time start))
 	(let* ((base (org-date-to-gregorian start))
 	       (target (org-date-to-gregorian current))
 	       (sday (calendar-absolute-from-gregorian base))
@@ -16614,6 +16656,8 @@ conventions:
      type.  In this case, that link must be a well-formed plain
      or angle link, i.e., it must have an explicit \"file\" type.
 
+Equip each image with the key-map `image-map'.
+
 When optional argument INCLUDE-LINKED is non-nil, also links with
 a text description part will be inlined.  This can be nice for
 a quick look at those images, but it does not reflect what
@@ -16688,7 +16732,6 @@ boundaries."
 		  (let ((width
 			 ;; Apply `org-image-actual-width' specifications.
 			 (cond
-			  ((not (image-type-available-p 'imagemagick)) nil)
 			  ((eq org-image-actual-width t) nil)
 			  ((listp org-image-actual-width)
 			   (or
@@ -16708,14 +16751,15 @@ boundaries."
 			    ;; Otherwise, fall-back to provided number.
 			    (car org-image-actual-width)))
 			  ((numberp org-image-actual-width)
-			   org-image-actual-width)))
+			   org-image-actual-width)
+			  (t nil)))
 			(old (get-char-property-and-overlay
 			      (org-element-property :begin link)
 			      'org-image-overlay)))
 		    (if (and (car-safe old) refresh)
 			(image-refresh (overlay-get (cdr old) 'display))
 		      (let ((image (create-image file
-						 (and width 'imagemagick)
+						 (and (image-type-available-p 'imagemagick) 'imagemagick)
 						 nil
 						 :width width)))
 			(when image
@@ -16732,6 +16776,7 @@ boundaries."
 			    (overlay-put
 			     ov 'modification-hooks
 			     (list 'org-display-inline-remove-overlay))
+			    (overlay-put ov 'keymap image-map)
 			    (push ov org-inline-image-overlays)))))))))))))))
 
 (defun org-display-inline-remove-overlay (ov after _beg _end &optional _len)
@@ -17911,18 +17956,35 @@ Use `\\[org-edit-special]' to edit table.el tables"))
     (org-reset-file-cache))
   (message "%s restarted" major-mode))
 
+(defun org-flag-above-first-heading (&optional arg)
+  "Hide from bob up to the first heading.
+Move point to the beginning of first heading or end of buffer."
+  (goto-char (point-min))
+  (unless (org-at-heading-p)
+    (outline-next-heading))
+  (unless (bobp)
+    (org-flag-region 1 (1- (point)) (not arg) 'outline)))
+
+(defun org-show-branches-buffer ()
+  "Show all branches in the buffer."
+  (org-flag-above-first-heading)
+  (outline-hide-sublevels 1)
+  (unless (eobp)
+    (outline-show-branches)
+    (while (outline-get-next-sibling)
+      (outline-show-branches)))
+  (goto-char (point-min)))
+
 (defun org-kill-note-or-show-branches ()
-  "Abort storing current note, or call `outline-show-branches'."
+  "Abort storing current note, or show just branches."
   (interactive)
-  (if (not org-finish-function)
-      (save-excursion
-	(save-restriction
-	  (org-narrow-to-subtree)
-	  (org-flag-subtree t)
-	  (call-interactively 'outline-show-branches)
-	  (org-hide-archived-subtrees (point-min) (point-max))))
-    (let ((org-note-abort t))
-      (funcall org-finish-function))))
+  (if org-finish-function
+      (let ((org-note-abort t))
+        (funcall org-finish-function))
+    (if (org-before-first-heading-p)
+        (org-show-branches-buffer)
+      (outline-hide-subtree)
+      (outline-show-branches))))
 
 (defun org-delete-indentation (&optional arg)
   "Join current line to previous and fix whitespace at join.
@@ -18056,14 +18118,20 @@ context.  See the individual commands for more information."
   (interactive)
   (org-return t))
 
-(defun org-ctrl-c-tab (&optional _arg)
+(defun org-ctrl-c-tab (&optional arg)
   "Toggle columns width in a table, or show children.
 Call `org-table-toggle-column-width' if point is in a table.
-Otherwise, call `org-show-children'."
+Otherwise, call `org-show-children'.  ARG is the level to hide."
   (interactive "p")
-  (call-interactively
-   (if (org-at-table-p) #'org-table-toggle-column-width
-     #'org-show-children)))
+  (if (org-at-table-p)
+      (call-interactively #'org-table-toggle-column-width)
+    (if (org-before-first-heading-p)
+        (progn
+          (org-flag-above-first-heading)
+          (outline-hide-sublevels (or arg 1))
+          (goto-char (point-min)))
+      (outline-hide-subtree)
+      (org-show-children arg))))
 
 (defun org-ctrl-c-star ()
   "Compute table, or change heading status of lines.
@@ -19992,13 +20060,12 @@ return an active timestamp."
   "Convert TIMESTAMP object into an Emacs internal time value.
 Use end of date range or time range when END is non-nil.
 Otherwise, use its start."
-  (apply #'encode-time
-	 (cons 0
-	       (mapcar
-		(lambda (prop) (or (org-element-property prop timestamp) 0))
-		(if end '(:minute-end :hour-end :day-end :month-end :year-end)
-		  '(:minute-start :hour-start :day-start :month-start
-				  :year-start))))))
+  (apply #'encode-time 0
+	 (mapcar
+	  (lambda (prop) (or (org-element-property prop timestamp) 0))
+	  (if end '(:minute-end :hour-end :day-end :month-end :year-end)
+	    '(:minute-start :hour-start :day-start :month-start
+			    :year-start)))))
 
 (defun org-timestamp-has-time-p (timestamp)
   "Non-nil when TIMESTAMP has a time specified."
