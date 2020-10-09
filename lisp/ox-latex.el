@@ -1,6 +1,6 @@
 ;;; ox-latex.el --- LaTeX Back-End for Org Export Engine -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2011-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2011-2020 Free Software Foundation, Inc.
 
 ;; Author: Nicolas Goaziou <n.goaziou at gmail dot com>
 ;; Keywords: outlines, hypermedia, calendar, wp
@@ -29,6 +29,8 @@
 (require 'cl-lib)
 (require 'ox)
 (require 'ox-publish)
+
+;;; Function Declarations
 
 (defvar org-latex-default-packages-alist)
 (defvar org-latex-packages-alist)
@@ -212,13 +214,12 @@
 
 (defconst org-latex-polyglossia-language-alist
   '(("am" "amharic")
-    ("ast" "asturian")
     ("ar" "arabic")
-    ("bo" "tibetan")
-    ("bn" "bengali")
+    ("ast" "asturian")
     ("bg" "bulgarian")
+    ("bn" "bengali")
+    ("bo" "tibetan")
     ("br" "breton")
-    ("bt-br" "brazilian")
     ("ca" "catalan")
     ("cop" "coptic")
     ("cs" "czech")
@@ -227,6 +228,7 @@
     ("de" "german" "german")
     ("de-at" "german" "austrian")
     ("de-de" "german" "german")
+    ("dsb" "lsorbian")
     ("dv" "divehi")
     ("el" "greek")
     ("en" "english" "usmax")
@@ -248,40 +250,40 @@
     ("he" "hebrew")
     ("hi" "hindi")
     ("hr" "croatian")
+    ("hsb" "usorbian")
     ("hu" "magyar")
     ("hy" "armenian")
-    ("id" "bahasai")
     ("ia" "interlingua")
+    ("id" "bahasai")
     ("is" "icelandic")
     ("it" "italian")
     ("kn" "kannada")
     ("la" "latin" "modern")
-    ("la-modern" "latin" "modern")
     ("la-classic" "latin" "classic")
     ("la-medieval" "latin" "medieval")
+    ("la-modern" "latin" "modern")
     ("lo" "lao")
     ("lt" "lithuanian")
     ("lv" "latvian")
-    ("mr" "maranthi")
     ("ml" "malayalam")
-    ("nl" "dutch")
+    ("mr" "maranthi")
     ("nb" "norsk")
-    ("nn" "nynorsk")
     ("nko" "nko")
+    ("nl" "dutch")
+    ("nn" "nynorsk")
     ("no" "norsk")
     ("oc" "occitan")
     ("pl" "polish")
     ("pms" "piedmontese")
     ("pt" "portuges")
+    ("pt-br" "brazilian")
     ("rm" "romansh")
     ("ro" "romanian")
     ("ru" "russian")
     ("sa" "sanskrit")
-    ("hsb" "usorbian")
-    ("dsb" "lsorbian")
+    ("se" "samin")
     ("sk" "slovak")
     ("sl" "slovenian")
-    ("se" "samin")
     ("sq" "albanian")
     ("sr" "serbian")
     ("sv" "swedish")
@@ -295,8 +297,6 @@
     ("ur" "urdu")
     ("vi" "vietnamese"))
   "Alist between language code and corresponding Polyglossia option")
-
-
 
 (defconst org-latex-table-matrix-macros '(("bordermatrix" . "\\cr")
 					  ("qbordermatrix" . "\\cr")
@@ -386,7 +386,7 @@ variable is non-nil, Org passes their value to \\label unchanged.
 You are responsible for ensuring that the value is a valid LaTeX
 \\label key, and that no other \\label commands with the same key
 appear elsewhere in your document.  (Keys may contain letters,
-numbers, and the following punctuation: '_' '.'  '-' ':'.)  There
+numbers, and the following punctuation: `_' `.' `-' `:'.)  There
 are no such limitations on CUSTOM_ID and NAME when this variable
 is nil.
 
@@ -738,8 +738,9 @@ environment."
   :safe #'stringp)
 
 (defcustom org-latex-inline-image-rules
-  `(("file" . ,(regexp-opt
-		'("pdf" "jpeg" "jpg" "png" "ps" "eps" "tikz" "pgf" "svg"))))
+  `(("file" . ,(rx "."
+		   (or "pdf" "jpeg" "jpg" "png" "ps" "eps" "tikz" "pgf" "svg")
+		   eos)))
   "Rules characterizing image files that can be inlined into LaTeX.
 
 A rule consists in an association whose key is the type of link
@@ -752,8 +753,7 @@ pdflatex, pdf, jpg and png images are OK.  When processing
 through dvi to Postscript, only ps and eps are allowed.  The
 default we use here encompasses both."
   :group 'org-export-latex
-  :version "24.4"
-  :package-version '(Org . "8.0")
+  :package-version '(Org . "9.4")
   :type '(alist :key-type (string :tag "Type")
 		:value-type (regexp :tag "Path")))
 
@@ -1241,7 +1241,7 @@ calling `org-latex-compile'."
   :package-version '(Org . "8.3")
   :type '(repeat
 	  (cons
-	   (string :tag "Regexp")
+	   (regexp :tag "Regexp")
 	   (string :tag "Message"))))
 
 
@@ -1249,7 +1249,7 @@ calling `org-latex-compile'."
 ;;; Internal Functions
 
 (defun org-latex--caption-above-p (element info)
-  "Non nil when caption is expected to be located above ELEMENT.
+  "Non-nil when caption is expected to be located above ELEMENT.
 INFO is a plist holding contextual information."
   (let ((above (plist-get info :latex-caption-above)))
     (if (symbolp above) above
@@ -1340,7 +1340,7 @@ For non-floats, see `org-latex--wrap-label'."
 		      (t (symbol-name type*)))
 		  ""))
 	      (if short (format "[%s]" (org-export-data short info)) "")
-	      label
+	      (org-trim label)
 	      (org-export-data main info))))))
 
 (defun org-latex-guess-inputenc (header)
@@ -1588,6 +1588,7 @@ INFO is a plist used as a communication channel."
 			lang))))
     `((?a . ,(org-export-data (plist-get info :author) info))
       (?t . ,(org-export-data (plist-get info :title) info))
+      (?s . ,(org-export-data (plist-get info :subtitle) info))
       (?k . ,(org-export-data (org-latex--wrap-latex-math-block
 			       (plist-get info :keywords) info)
 			      info))
@@ -2173,25 +2174,27 @@ contextual information."
   "Transcode an ITEM element from Org to LaTeX.
 CONTENTS holds the contents of the item.  INFO is a plist holding
 contextual information."
-  (let* ((counter
-	  (let ((count (org-element-property :counter item))
-		(level
-		 ;; Determine level of current item to determine the
-		 ;; correct LaTeX counter to use (enumi, enumii...).
-		 (let ((parent item) (level 0))
-		   (while (memq (org-element-type
-				 (setq parent (org-export-get-parent parent)))
-				'(plain-list item))
-		     (when (and (eq (org-element-type parent) 'plain-list)
-				(eq (org-element-property :type parent)
-				    'ordered))
-		       (cl-incf level)))
-		   level)))
-	    (and count
-		 (< level 5)
-		 (format "\\setcounter{enum%s}{%s}\n"
-			 (nth (1- level) '("i" "ii" "iii" "iv"))
-			 (1- count)))))
+  (let* ((orderedp (eq (org-element-property
+			:type (org-export-get-parent item))
+		       'ordered))
+	 (level
+	  ;; Determine level of current item to determine the
+	  ;; correct LaTeX counter to use (enumi, enumii...).
+	  (let ((parent item) (level 0))
+	    (while (memq (org-element-type
+			  (setq parent (org-export-get-parent parent)))
+			 '(plain-list item))
+	      (when (and (eq (org-element-type parent) 'plain-list)
+			 (eq (org-element-property :type parent)
+			     'ordered))
+		(cl-incf level)))
+	    level))
+	 (count (org-element-property :counter item))
+	 (counter (and count
+		       (< level 5)
+		       (format "\\setcounter{enum%s}{%s}\n"
+			       (nth (1- level) '("i" "ii" "iii" "iv"))
+			       (1- count))))
 	 (checkbox (cl-case (org-element-property :checkbox item)
 		     (on "$\\boxtimes$")
 		     (off "$\\square$")
@@ -2210,9 +2213,11 @@ contextual information."
 	    "\\item"
 	    (cond
 	     ((and checkbox tag)
-	      (format "[{%s %s}] %s" checkbox tag tag-footnotes))
+	      (format (if orderedp "{%s %s} %s" "[{%s %s}] %s")
+		      checkbox tag tag-footnotes))
 	     ((or checkbox tag)
-	      (format "[{%s}] %s" (or checkbox tag) tag-footnotes))
+	      (format (if orderedp "{%s} %s" "[{%s}] %s")
+		      (or checkbox tag) tag-footnotes))
 	     ;; Without a tag or a check-box, if CONTENTS starts with
 	     ;; an opening square bracket, add "\relax" to "\item",
 	     ;; unless the brackets comes from an initial export
@@ -2384,8 +2389,11 @@ used as a communication channel."
 	      (format "[%s]" (plist-get info :latex-default-figure-position)))
 	     (t ""))))
 	 (center
-	  (if (plist-member attr :center) (plist-get attr :center)
-	    (plist-get info :latex-images-centered)))
+	  (cond
+	   ;; If link is an image link, do not center.
+	   ((eq 'link (org-element-type (org-export-get-parent link))) nil)
+	   ((plist-member attr :center) (plist-get attr :center))
+	   (t (plist-get info :latex-images-centered))))
 	 (comment-include (if (plist-get attr :comment-include) "%" ""))
 	 ;; It is possible to specify scale or width and height in
 	 ;; the ATTR_LATEX line, and also via default variables.
@@ -2427,7 +2435,8 @@ used as a communication channel."
 		       (format "\\resizebox{%s}{%s}{%s}"
 			       (if (org-string-nw-p width) width "!")
 			       (if (org-string-nw-p height) height "!")
-			       image-code)))))
+			       image-code))
+		      (t image-code))))
       ;; For other images:
       ;; - add scale, or width and height to options.
       ;; - include the image with \includegraphics.
@@ -2519,15 +2528,16 @@ INFO is a plist holding contextual information.  See
 	 (imagep (org-export-inline-image-p
 		  link (plist-get info :latex-inline-image-rules)))
 	 (path (org-latex--protect-text
-		(cond ((member type '("http" "https" "ftp" "mailto" "doi"))
-		       (concat type ":" raw-path))
-		      ((string= type "file")
-		       (org-export-file-uri raw-path))
-		      (t
-		       raw-path)))))
+		(pcase type
+		  ((or "http" "https" "ftp" "mailto" "doi")
+		   (concat type ":" raw-path))
+		  ("file"
+		   (org-export-file-uri raw-path))
+		  (_
+		   raw-path)))))
     (cond
      ;; Link type is handled by a special function.
-     ((org-export-custom-protocol-maybe link desc 'latex))
+     ((org-export-custom-protocol-maybe link desc 'latex info))
      ;; Image file.
      (imagep (org-latex--inline-image link info))
      ;; Radio link: Transcode target's contents and use them as link's
@@ -2578,7 +2588,9 @@ INFO is a plist holding contextual information.  See
      ;; equivalent line number.
      ((string= type "coderef")
       (format (org-export-get-coderef-format path desc)
-	      (org-export-resolve-coderef path info)))
+	      ;; Resolve with RAW-PATH since PATH could be tainted
+	      ;; with `org-latex--protect-text' call above.
+	      (org-export-resolve-coderef raw-path info)))
      ;; External link with a description part.
      ((and path desc) (format "\\href{%s}{%s}" path desc))
      ;; External link without a description part.
@@ -2959,21 +2971,23 @@ contextual information."
        ;; Case 3.  Use minted package.
        ((eq listings 'minted)
 	(let* ((caption-str (org-latex--caption/label-string src-block info))
+	       (placement (or (org-unbracket-string "[" "]" (plist-get attributes :placement))
+			      (plist-get info :latex-default-figure-position)))
 	       (float-env
 		(cond
 		 ((string= "multicolumn" float)
 		  (format "\\begin{listing*}[%s]\n%s%%s\n%s\\end{listing*}"
-			  (plist-get info :latex-default-figure-position)
+			  placement
 			  (if caption-above-p caption-str "")
 			  (if caption-above-p "" caption-str)))
 		 (caption
 		  (format "\\begin{listing}[%s]\n%s%%s\n%s\\end{listing}"
-			  (plist-get info :latex-default-figure-position)
+			  placement
 			  (if caption-above-p caption-str "")
 			  (if caption-above-p "" caption-str)))
 		 ((string= "t" float)
 		  (concat (format "\\begin{listing}[%s]\n"
-				  (plist-get info :latex-default-figure-position))
+				  placement)
 			  "%s\n\\end{listing}"))
 		 (t "%s")))
 	       (options (plist-get info :latex-minted-options))
@@ -3307,7 +3321,7 @@ property."
 	  (above? (org-latex--caption-above-p table info)))
       (when (plist-get attr :rmlines)
 	;; When the "rmlines" attribute is provided, remove all hlines
-	;; but the the one separating heading from the table body.
+	;; but the one separating heading from the table body.
 	(let ((n 0) (pos 0))
 	  (while (and (< (length output) pos)
 		      (setq pos (string-match "^\\\\hline\n?" output pos)))

@@ -1,22 +1,24 @@
 ;;; org-num.el --- Dynamic Headlines Numbering  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2018-2019  Free Software Foundation, Inc.
+;; Copyright (C) 2018-2020 Free Software Foundation, Inc.
 
 ;; Author: Nicolas Goaziou <mail@nicolasgoaziou.fr>
 ;; Keywords: outlines, hypermedia, calendar, wp
 
-;; This program is free software; you can redistribute it and/or modify
+;; This file is part of GNU Emacs.
+
+;; GNU Emacs is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
 ;; the Free Software Foundation, either version 3 of the License, or
 ;; (at your option) any later version.
 
-;; This program is distributed in the hope that it will be useful,
+;; GNU Emacs is distributed in the hope that it will be useful,
 ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+;; along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 
@@ -129,7 +131,7 @@ For example, add \"ARCHIVE\" to this list to avoid numbering
 archived sub-trees.
 
 Tag in this list prevent numbering the whole sub-tree,
-irrespective to `org-use-tags-inheritance', or other means to
+irrespective to `org-use-tag-inheritance', or other means to
 control tag inheritance."
   :group 'org-appearance
   :package-version '(Org . "9.3")
@@ -252,6 +254,7 @@ otherwise."
              org-footnote-section
              (equal title org-footnote-section))
         (and org-num-skip-commented
+	     title
              (let ((case-fold-search nil))
                (string-match org-num--comment-re title))
              t)
@@ -464,6 +467,10 @@ NUMBERING is a list of numbers."
     (remove-hook 'after-change-functions #'org-num--verify t)
     (remove-hook 'change-major-mode-hook #'org-num--clear t))))
 
-
 (provide 'org-num)
+
+;; Local variables:
+;; generated-autoload-file: "org-loaddefs.el"
+;; End:
+
 ;;; org-num.el ends here

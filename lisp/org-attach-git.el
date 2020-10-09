@@ -1,6 +1,6 @@
-;;; org-attach-git.el --- Automatic git commit extention to org-attach -*- lexical-binding: t; -*-
+;;; org-attach-git.el --- Automatic git commit extension to org-attach -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2019 Free Software Foundation, Inc.
+;; Copyright (C) 2019-2020 Free Software Foundation, Inc.
 
 ;; Original Author: John Wiegley <johnw@newartisans.com>
 ;; Restructurer: Gustav Wikström <gustav@whil.se>
@@ -23,10 +23,9 @@
 
 ;;; Commentary:
 
-;; An extention to org-attach.  If the attachment-directory to an
-;; outline node (using either DIR or ID) is initialized as a Git
-;; repository, then org-attach-git will automatically commit changes
-;; when it sees them.
+;; An extension to org-attach.  If `org-attach-id-dir' is initialized
+;; as a Git repository, then org-attach-git will automatically commit
+;; changes when it sees them.  Requires git-annex.
 
 ;;; Code:
 
@@ -81,9 +80,12 @@ Signals an error if the file content is not available and it was not retrieved."
 	(message "Running git annex get \"%s\"." path-relative)
 	(call-process "git" nil nil nil "annex" "get" path-relative)))))
 
-(defun org-attach-git-commit ()
+(defun org-attach-git-commit (&optional _)
   "Commit changes to git if `org-attach-id-dir' is properly initialized.
-This checks for the existence of a \".git\" directory in that directory."
+This checks for the existence of a \".git\" directory in that directory.
+
+Takes an unused optional argument for the sake of being compatible
+with hook `org-attach-after-change-hook'."
   (let* ((dir (expand-file-name org-attach-id-dir))
 	 (git-dir (vc-git-root dir))
 	 (use-annex (org-attach-git-use-annex))

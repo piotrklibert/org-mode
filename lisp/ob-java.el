@@ -1,8 +1,9 @@
 ;;; ob-java.el --- Babel Functions for Java          -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2011-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2011-2020 Free Software Foundation, Inc.
 
 ;; Author: Eric Schulte
+;; Maintainer: Ian Martins <ianxm@jhu.edu>
 ;; Keywords: literate programming, reproducible research
 ;; Homepage: https://orgmode.org
 
@@ -58,18 +59,19 @@ parameters may be used, like javac -verbose"
 	 (src-file (concat classname ".java"))
 	 (cmpflag (or (cdr (assq :cmpflag params)) ""))
 	 (cmdline (or (cdr (assq :cmdline params)) ""))
+	 (cmdargs (or (cdr (assq :cmdargs params)) ""))
 	 (full-body (org-babel-expand-body:generic body params)))
-    (with-temp-file src-file (insert full-body))
-    (org-babel-eval
-     (concat org-babel-java-compiler " " cmpflag " " src-file) "")
     ;; created package-name directories if missing
     (unless (or (not packagename) (file-exists-p packagename))
       (make-directory packagename 'parents))
+    (with-temp-file src-file (insert full-body))
+    (org-babel-eval
+     (concat org-babel-java-compiler " " cmpflag " " src-file) "")
     (let ((results (org-babel-eval (concat org-babel-java-command
-                                           " " cmdline " " classname) "")))
+                                           " " cmdline " " classname " " cmdargs) "")))
       (org-babel-reassemble-table
        (org-babel-result-cond (cdr (assq :result-params params))
-	 (org-babel-read results)
+	 (org-babel-read results t)
          (let ((tmp-file (org-babel-temp-file "c-")))
            (with-temp-file tmp-file (insert results))
            (org-babel-import-elisp-from-file tmp-file)))
@@ -79,7 +81,5 @@ parameters may be used, like javac -verbose"
         (cdr (assq :rowname-names params)) (cdr (assq :rownames params)))))))
 
 (provide 'ob-java)
-
-
 
 ;;; ob-java.el ends here

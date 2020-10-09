@@ -55,49 +55,48 @@
 
 (ert-deftest test-ol/escape ()
   "Test `org-link-escape' specifications."
-  ;; No-op when there is no backslash or closing square bracket.
-  (should (string= "foo[" (org-link-escape "foo[")))
-  ;; Escape closing square bracket at the end of the link.
-  (should (string= "[foo\\]" (org-link-escape "[foo]")))
-  ;; Escape closing square brackets followed by another square
-  ;; bracket.
-  (should (string= "foo\\][bar" (org-link-escape "foo][bar")))
-  (should (string= "foo\\]]bar" (org-link-escape "foo]]bar")))
-  ;; However, escaping closing square bracket at the end of the link
-  ;; has precedence over the previous rule.
-  (should (string= "foo]\\]" (org-link-escape "foo]]")))
+  ;; No-op when there is no backslash or square bracket.
+  (should (string= "foo" (org-link-escape "foo")))
+  ;; Escape square brackets at boundaries of the link.
+  (should (string= "\\[foo\\]" (org-link-escape "[foo]")))
+  ;; Escape square brackets followed by another square bracket.
+  (should (string= "foo\\]\\[bar" (org-link-escape "foo][bar")))
+  (should (string= "foo\\]\\]bar" (org-link-escape "foo]]bar")))
+  (should (string= "foo\\[\\[bar" (org-link-escape "foo[[bar")))
+  (should (string= "foo\\[\\]bar" (org-link-escape "foo[]bar")))
   ;; Escape backslashes at the end of the link.
   (should (string= "foo\\\\" (org-link-escape "foo\\")))
   ;; Escape backslashes that could be confused with escaping
   ;; characters.
   (should (string= "foo\\\\\\]" (org-link-escape "foo\\]")))
-  (should (string= "foo\\\\\\][" (org-link-escape "foo\\][")))
-  (should (string= "foo\\\\\\]]bar" (org-link-escape "foo\\]]bar")))
+  (should (string= "foo\\\\\\]\\[" (org-link-escape "foo\\][")))
+  (should (string= "foo\\\\\\]\\]bar" (org-link-escape "foo\\]]bar")))
   ;; Do not escape backslash characters when unnecessary.
   (should (string= "foo\\bar" (org-link-escape "foo\\bar")))
-  (should (string= "foo\\]bar" (org-link-escape "foo\\]bar")))
   ;; Pathological cases: consecutive closing square brackets.
-  (should (string= "[[[foo\\]]\\]" (org-link-escape "[[[foo]]]")))
-  (should (string= "[[[foo]\\]] bar" (org-link-escape "[[[foo]]] bar"))))
+  (should (string= "\\[\\[\\[foo\\]\\]\\]" (org-link-escape "[[[foo]]]")))
+  (should (string= "\\[\\[foo\\]\\] bar" (org-link-escape "[[foo]] bar"))))
 
 (ert-deftest test-ol/unescape ()
   "Test `org-link-unescape' specifications."
   ;; No-op if there is no backslash.
-  (should (string= "foo[" (org-link-unescape "foo[")))
+  (should (string= "foo" (org-link-unescape "foo")))
   ;; No-op if backslashes are not escaping backslashes.
   (should (string= "foo\\bar" (org-link-unescape "foo\\bar")))
-  (should (string= "foo\\]bar" (org-link-unescape "foo\\]bar")))
-  ;;
+  ;; Unescape backslashes before square brackets.
+  (should (string= "foo]bar" (org-link-unescape "foo\\]bar")))
   (should (string= "foo\\]" (org-link-unescape "foo\\\\\\]")))
   (should (string= "foo\\][" (org-link-unescape "foo\\\\\\][")))
-  (should (string= "foo\\]]bar" (org-link-unescape "foo\\\\\\]]bar")))
+  (should (string= "foo\\]]bar" (org-link-unescape "foo\\\\\\]\\]bar")))
+  (should (string= "foo\\[[bar" (org-link-unescape "foo\\\\\\[\\[bar")))
+  (should (string= "foo\\[]bar" (org-link-unescape "foo\\\\\\[\\]bar")))
   ;; Unescape backslashes at the end of the link.
   (should (string= "foo\\" (org-link-unescape "foo\\\\")))
-  ;; Unescape closing square bracket at the end of the link.
-  (should (string= "[foo]" (org-link-unescape "[foo\\]")))
+  ;; Unescape closing square bracket at boundaries of the link.
+  (should (string= "[foo]" (org-link-unescape "\\[foo\\]")))
   ;; Pathological cases: consecutive closing square brackets.
-  (should (string= "[[[foo]]]" (org-link-unescape "[[[foo\\]]\\]")))
-  (should (string= "[[[foo]]] bar" (org-link-unescape "[[[foo]\\]] bar"))))
+  (should (string= "[[[foo]]]" (org-link-unescape "\\[\\[\\[foo\\]\\]\\]")))
+  (should (string= "[[foo]] bar" (org-link-unescape "\\[\\[foo\\]\\] bar"))))
 
 (ert-deftest test-ol/make-string ()
   "Test `org-link-make-string' specifications."
@@ -131,6 +130,32 @@
   (should
    (let (org-store-link-props org-stored-links)
      (org-test-with-temp-text-in-file "* H1"
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::*H1][H1]]" file)
+		(org-store-link nil))))))
+  ;; On a headline, remove TODO and COMMENT keywords, priority cookie,
+  ;; and tags.
+  (should
+   (let (org-store-link-props org-stored-links)
+     (org-test-with-temp-text-in-file "* TODO H1"
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::*H1][H1]]" file)
+		(org-store-link nil))))))
+  (should
+   (let (org-store-link-props org-stored-links)
+     (org-test-with-temp-text-in-file "* COMMENT H1"
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::*H1][H1]]" file)
+		(org-store-link nil))))))
+  (should
+   (let (org-store-link-props org-stored-links)
+     (org-test-with-temp-text-in-file "* [#A] H1"
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::*H1][H1]]" file)
+		(org-store-link nil))))))
+  (should
+   (let (org-store-link-props org-stored-links)
+     (org-test-with-temp-text-in-file "* H1 :tag:"
        (let ((file (buffer-file-name)))
 	 (equal (format "[[file:%s::*H1][H1]]" file)
 		(org-store-link nil))))))
@@ -204,11 +229,11 @@
   ;; Store file link to non-Org buffer, with context.
   (should
    (let ((org-stored-links nil)
-	 (org-context-in-file-links t))
+	 (org-link-context-for-files t))
      (org-test-with-temp-text-in-file "one\n<point>two"
        (fundamental-mode)
        (let ((file (buffer-file-name)))
-	 (equal (format "[[file:%s::one]]" file)
+	 (equal (format "[[file:%s::two]]" file)
 		(org-store-link nil))))))
   ;; Store file link to non-Org buffer, without context.
   (should
@@ -218,16 +243,16 @@
        (fundamental-mode)
        (let ((file (buffer-file-name)))
 	 (equal (format "[[file:%s][file:%s]]" file file)
-	 	(org-store-link nil))))))
+		(org-store-link nil))))))
   ;; C-u prefix reverses `org-context-in-file-links' in non-Org
   ;; buffer.
   (should
    (let ((org-stored-links nil)
-	 (org-context-in-file-links nil))
+	 (org-link-context-for-files nil))
      (org-test-with-temp-text-in-file "one\n<point>two"
        (fundamental-mode)
        (let ((file (buffer-file-name)))
-	 (equal (format "[[file:%s::one]]" file)
+	 (equal (format "[[file:%s::two]]" file)
 		(org-store-link '(4)))))))
   ;; A C-u C-u does *not* reverse `org-context-in-file-links' in
   ;; non-Org buffer.
@@ -238,7 +263,95 @@
        (fundamental-mode)
        (let ((file (buffer-file-name)))
 	 (equal (format "[[file:%s][file:%s]]" file file)
-	 	(org-store-link '(16))))))))
+		(org-store-link '(16)))))))
+  ;; Context does not include special search syntax.
+  (should
+   (let ((org-stored-links nil)
+	 (org-context-in-file-links t))
+     (org-test-with-temp-text-in-file "(two)"
+       (fundamental-mode)
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::two]]" file file)
+		(org-store-link nil))))))
+  (should
+   (let ((org-stored-links nil)
+	 (org-context-in-file-links t))
+     (org-test-with-temp-text-in-file "# two"
+       (fundamental-mode)
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::two]]" file file)
+		(org-store-link nil))))))
+  (should
+   (let ((org-stored-links nil)
+	 (org-context-in-file-links t))
+     (org-test-with-temp-text-in-file "*two"
+       (fundamental-mode)
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::two]]" file file)
+		(org-store-link nil))))))
+  (should
+   (let ((org-stored-links nil)
+	 (org-context-in-file-links t))
+     (org-test-with-temp-text-in-file "( two )"
+       (fundamental-mode)
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::two]]" file file)
+		(org-store-link nil))))))
+  (should
+   (let ((org-stored-links nil)
+	 (org-context-in-file-links t))
+     (org-test-with-temp-text-in-file "# two"
+       (fundamental-mode)
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::two]]" file file)
+		(org-store-link nil))))))
+  (should
+   (let ((org-stored-links nil)
+	 (org-context-in-file-links t))
+     (org-test-with-temp-text-in-file "#( two )"
+       (fundamental-mode)
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::two]]" file file)
+		(org-store-link nil))))))
+  (should
+   (let ((org-stored-links nil)
+	 (org-context-in-file-links t))
+     (org-test-with-temp-text-in-file "#** ((## two) )"
+       (fundamental-mode)
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::two]]" file file)
+		(org-store-link nil))))))
+  (should-not
+   (let ((org-stored-links nil)
+	 (org-context-in-file-links t))
+     (org-test-with-temp-text-in-file "(two"
+       (fundamental-mode)
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::two]]" file file)
+		(org-store-link nil))))))
+  ;; Context also ignore statistics cookies and special headlines
+  ;; data.
+  (should
+   (let ((org-stored-links nil)
+	 (org-context-in-file-links t))
+     (org-test-with-temp-text-in-file "* TODO [#A] COMMENT foo :bar:"
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::*foo][foo]]" file file)
+		(org-store-link nil))))))
+  (should
+   (let ((org-stored-links nil)
+	 (org-context-in-file-links t))
+     (org-test-with-temp-text-in-file "* foo[33%]bar"
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::*foo bar][foo bar]]" file file)
+		(org-store-link nil))))))
+  (should
+   (let ((org-stored-links nil)
+	 (org-context-in-file-links t))
+     (org-test-with-temp-text-in-file "* [%][/]  foo [35%] bar[3/5]"
+       (let ((file (buffer-file-name)))
+	 (equal (format "[[file:%s::*foo bar][foo bar]]" file file)
+		(org-store-link nil)))))))
 
 
 ;;; Radio Targets

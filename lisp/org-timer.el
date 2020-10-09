@@ -1,6 +1,6 @@
 ;;; org-timer.el --- Timer code for Org mode         -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2008-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2008-2020 Free Software Foundation, Inc.
 
 ;; Author: Carsten Dominik <carsten at orgmode dot org>
 ;; Keywords: outlines, hypermedia, calendar, wp
@@ -466,23 +466,23 @@ time is up."
 		 (run-hooks 'org-timer-done-hook)))))
 
 (defun org-timer--get-timer-title ()
-  "Construct timer title from heading or file name of Org buffer."
+  "Construct timer title.
+Try to use an Org header, otherwise use the buffer name."
   (cond
    ((derived-mode-p 'org-agenda-mode)
-    (let* ((marker (or (get-text-property (point) 'org-marker)
-		       (org-agenda-error)))
+    (let* ((marker (or (get-text-property (point) 'org-marker)))
 	   (hdmarker (or (get-text-property (point) 'org-hd-marker)
 			 marker)))
-      (with-current-buffer (marker-buffer marker)
-	(org-with-wide-buffer
-	 (goto-char hdmarker)
-	 (org-show-entry)
-	 (or (ignore-errors (org-get-heading))
-	     (buffer-name (buffer-base-buffer)))))))
+      (when (and marker (marker-buffer marker))
+	(with-current-buffer (marker-buffer marker)
+	  (org-with-wide-buffer
+	   (goto-char hdmarker)
+	   (org-show-entry)
+	   (or (ignore-errors (org-get-heading))
+	       (buffer-name (buffer-base-buffer))))))))
    ((derived-mode-p 'org-mode)
-    (or (ignore-errors (org-get-heading))
-	(buffer-name (buffer-base-buffer))))
-   (t (error "Not in an Org buffer"))))
+    (ignore-errors (org-get-heading)))
+   (t (buffer-name (buffer-base-buffer)))))
 
 (provide 'org-timer)
 
