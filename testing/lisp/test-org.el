@@ -2103,7 +2103,12 @@
   (should-not
    (org-test-with-temp-text "* Headline :ARCHIVE:\n** Level 2\nBody"
      (goto-char (point-max))
-     (org-in-archived-heading-p t))))
+     (org-in-archived-heading-p t)))
+   ;; Archive tag containing ARCHIVE as substring
+   (should-not
+    (org-test-with-temp-text "* Headline :NOARCHIVE:\n** Level 2\nBody"
+     (goto-char (point-max))
+     (org-in-archived-heading-p))))
 
 (ert-deftest test-org/entry-blocked-p ()
   ;; Check other dependencies.
@@ -4710,6 +4715,32 @@ Text.
 	    (org-demote)
 	    (forward-line 2)
 	    (org-get-indentation))))))
+  ;; When `org-adapt-indentation' is non-nil, log drawers are
+  ;; adjusted.
+  (should
+   (equal
+    "** H\n   :LOGBOOK:\n   - a\n   :END:\n   b"
+    (org-test-with-temp-text "* H\n  :LOGBOOK:\n  - a\n  :END:\n  b"
+      (let ((org-odd-levels-only nil)
+	    (org-adapt-indentation t))
+	(org-demote))
+      (buffer-string))))
+  (should
+   (equal
+    "** H\n   :LOGBOOK:\n   - a\n   :END:\n  b"
+    (org-test-with-temp-text "* H\n  :LOGBOOK:\n  - a\n  :END:\n  b"
+      (let ((org-odd-levels-only nil)
+	    (org-adapt-indentation 'headline-data))
+	(org-demote))
+      (buffer-string))))
+  (should
+   (equal
+    "** H\n :LOGBOOK:\n - a\n :END:"
+    (org-test-with-temp-text "* H\n:LOGBOOK:\n- a\n:END:"
+      (let ((org-odd-levels-only nil)
+	    (org-adapt-indentation t))
+	(org-demote))
+      (buffer-string))))
   ;; Ignore contents of source blocks or example blocks when
   ;; indentation should be preserved (through
   ;; `org-src-preserve-indentation' or "-i" flag).
@@ -4878,6 +4909,41 @@ Text.
 	  (org-promote))
 	(forward-line)
 	(org-get-indentation))))
+  ;; When `org-adapt-indentation' is non-nil, log drawers are
+  ;; adjusted.
+  (should
+   (equal
+    "* H\n  :LOGBOOK:\n  - a\n  :END:\n  b"
+    (org-test-with-temp-text "** H\n   :LOGBOOK:\n   - a\n   :END:\n   b"
+      (let ((org-odd-levels-only nil)
+	    (org-adapt-indentation t))
+	(org-promote))
+      (buffer-string))))
+  (should
+   (equal
+    "* H\n  :LOGBOOK:\n  - a\n  :END:\n   b"
+    (org-test-with-temp-text "** H\n   :LOGBOOK:\n   - a\n   :END:\n   b"
+      (let ((org-odd-levels-only nil)
+	    (org-adapt-indentation 'headline-data))
+	(org-promote))
+      (buffer-string))))
+  (should
+   (equal
+    "* H\n:LOGBOOK:\n- a\n:END:"
+    (org-test-with-temp-text "** H\n:LOGBOOK:\n- a\n:END:"
+      (let ((org-odd-levels-only nil)
+	    (org-adapt-indentation t))
+	(org-promote))
+      (buffer-string))))
+  (should
+   (equal
+    "# H\n:LOGBOOK:\n- a\n:END:"
+    (org-test-with-temp-text "* H\n:LOGBOOK:\n- a\n:END:"
+      (let ((org-odd-levels-only nil)
+	    (org-allow-promoting-top-level-subtree t)
+	    (org-adapt-indentation t))
+	(org-promote))
+      (buffer-string))))
   ;; Ignore contents of source blocks or example blocks when
   ;; indentation should be preserved (through
   ;; `org-src-preserve-indentation' or "-i" flag).

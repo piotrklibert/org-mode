@@ -34,7 +34,9 @@
 
 (declare-function org-agenda-diary-entry "org-agenda")
 (declare-function org-agenda-maybe-redo "org-agenda" ())
+(declare-function org-agenda-set-restriction-lock "org-agenda" (&optional type))
 (declare-function org-agenda-remove-restriction-lock "org-agenda" (&optional noupdate))
+(declare-function org-calendar-goto-agenda "org-agenda" ())
 (declare-function org-align-tags "org" (&optional all))
 (declare-function org-at-heading-p "org" (&optional ignored))
 (declare-function org-at-table.el-p "org" ())
@@ -914,7 +916,7 @@ This also applied for speedbar access."
 	     (setq last-level level)))))
      (aref subs 1))))
 
-(eval-after-load "imenu"
+(eval-after-load 'imenu
   '(progn
      (add-hook 'imenu-after-jump-hook
 	       (lambda ()
@@ -976,7 +978,7 @@ To get rid of the restriction, use `\\[org-agenda-remove-restriction-lock]'."
 
 (defvar speedbar-file-key-map)
 (declare-function speedbar-add-supported-extension "speedbar" (extension))
-(eval-after-load "speedbar"
+(eval-after-load 'speedbar
   '(progn
      (speedbar-add-supported-extension ".org")
      (define-key speedbar-file-key-map "<" 'org-speedbar-set-agenda-restriction)
@@ -1086,7 +1088,7 @@ ELEMENT is the element at point."
        (flyspell-delete-region-overlays beg end)))
 
 (defvar flyspell-delayed-commands)
-(eval-after-load "flyspell"
+(eval-after-load 'flyspell
   '(add-to-list 'flyspell-delayed-commands 'org-self-insert-command))
 
 ;;;; Bookmark
@@ -1100,7 +1102,7 @@ ELEMENT is the element at point."
        (org-show-context 'bookmark-jump)))
 
 ;; Make `bookmark-jump' shows the jump location if it was hidden.
-(eval-after-load "bookmark"
+(eval-after-load 'bookmark
   '(if (boundp 'bookmark-after-jump-hook)
        ;; We can use the hook
        (add-hook 'bookmark-after-jump-hook 'org-bookmark-jump-unhide)
@@ -1154,13 +1156,13 @@ key."
     (local-set-key org-calendar-insert-diary-entry-key
 		   #'org-agenda-diary-entry)))
 
-(eval-after-load "calendar"
+(eval-after-load 'calendar
   '(add-hook 'calendar-mode-hook #'org--setup-calendar-bindings))
 
 ;;;; Saveplace
 
 ;; Make sure saveplace shows the location if it was hidden
-(eval-after-load "saveplace"
+(eval-after-load 'saveplace
   '(defadvice save-place-find-file-hook (after org-make-visible activate)
      "Make the position visible."
      (org-bookmark-jump-unhide)))
@@ -1168,7 +1170,7 @@ key."
 ;;;; Ecb
 
 ;; Make sure ecb shows the location if it was hidden
-(eval-after-load "ecb"
+(eval-after-load 'ecb
   '(defadvice ecb-method-clicked (after esf/org-show-context activate)
      "Make hierarchy visible when jumping into location from ECB tree buffer."
      (when (derived-mode-p 'org-mode)
@@ -1182,17 +1184,17 @@ key."
 	     (org-invisible-p))
     (org-show-context 'mark-goto)))
 
-(eval-after-load "simple"
+(eval-after-load 'simple
   '(defadvice pop-to-mark-command (after org-make-visible activate)
      "Make the point visible with `org-show-context'."
      (org-mark-jump-unhide)))
 
-(eval-after-load "simple"
+(eval-after-load 'simple
   '(defadvice exchange-point-and-mark (after org-make-visible activate)
      "Make the point visible with `org-show-context'."
      (org-mark-jump-unhide)))
 
-(eval-after-load "simple"
+(eval-after-load 'simple
   '(defadvice pop-global-mark (after org-make-visible activate)
      "Make the point visible with `org-show-context'."
      (org-mark-jump-unhide)))
@@ -1201,7 +1203,7 @@ key."
 
 ;; Make "session.el" ignore our circular variable.
 (defvar session-globals-exclude)
-(eval-after-load "session"
+(eval-after-load 'session
   '(add-to-list 'session-globals-exclude 'org-mark-ring))
 
 (provide 'org-compat)

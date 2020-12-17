@@ -149,6 +149,7 @@ Stars are put in group 1 and the trimmed body in group 2.")
 (declare-function org-columns-quit "org-colview" ())
 (declare-function org-columns-insert-dblock "org-colview" ())
 (declare-function org-duration-from-minutes "org-duration" (minutes &optional fmt canonical))
+(declare-function org-duration-to-minutes "org-duration" (duration &optional canonical))
 (declare-function org-element-at-point "org-element" ())
 (declare-function org-element-cache-refresh "org-element" (pos))
 (declare-function org-element-cache-reset "org-element" (&optional all))
@@ -232,7 +233,8 @@ byte-compiled before it is loaded."
       (org-babel-tangle-file file tangled-file "emacs-lisp\\|elisp"))
     (if compile
 	(progn
-	  (byte-compile-file tangled-file 'load)
+	  (byte-compile-file tangled-file)
+	  (load tangled-file)
 	  (message "Compiled and loaded %s" tangled-file))
       (load-file tangled-file)
       (message "Loaded %s" tangled-file))))
@@ -662,6 +664,7 @@ defined in org-duration.el.")
 (defvar org-modules-loaded nil
   "Have the modules been loaded already?")
 
+;;;###autoload
 (defun org-load-modules-maybe (&optional force)
   "Load all extensions listed in `org-modules'."
   (when (or force (not org-modules-loaded))
@@ -937,6 +940,7 @@ the following lines anywhere in the buffer:
    #+STARTUP: fold              (or `overview', this is equivalent)
    #+STARTUP: nofold            (or `showall', this is equivalent)
    #+STARTUP: content
+   #+STARTUP: show<n>levels (<n> = 2..5)
    #+STARTUP: showeverything
 
 Set `org-agenda-inhibit-startup' to a non-nil value if you want
@@ -947,6 +951,10 @@ time."
   :type '(choice
 	  (const :tag "nofold: show all" nil)
 	  (const :tag "fold: overview" t)
+	  (const :tag "fold: show two levels" show2levels)
+	  (const :tag "fold: show three levels" show3levels)
+	  (const :tag "fold: show four levels" show4evels)
+	  (const :tag "fold: show five levels" show5levels)
 	  (const :tag "content: all headlines" content)
 	  (const :tag "show everything, even drawers" showeverything)))
 
@@ -3567,10 +3575,11 @@ lines to the buffer:
 For example, a value \\='(title) for this list makes the document's title
 appear in the buffer without the initial \"#+TITLE:\" part."
   :group 'org-appearance
-  :version "24.1"
+  :package-version '(Org . "9.5")
   :type '(set (const :tag "#+AUTHOR" author)
 	      (const :tag "#+DATE" date)
 	      (const :tag "#+EMAIL" email)
+	      (const :tag "#+SUBTITLE" subtitle)
 	      (const :tag "#+TITLE" title)))
 
 (defcustom org-custom-properties nil
@@ -4118,6 +4127,10 @@ After a match, the following groups carry important information:
     ("overview" org-startup-folded t)
     ("nofold" org-startup-folded nil)
     ("showall" org-startup-folded nil)
+    ("show2levels" org-startup-folded show2levels)
+    ("show3levels" org-startup-folded show3levels)
+    ("show4levels" org-startup-folded show4levels)
+    ("show5levels" org-startup-folded show5levels)
     ("showeverything" org-startup-folded showeverything)
     ("content" org-startup-folded content)
     ("indent" org-startup-indented t)
@@ -4177,7 +4190,7 @@ After a match, the following groups carry important information:
   "Variable associated with STARTUP options for Org.
 Each element is a list of three items: the startup options (as written
 in the #+STARTUP line), the corresponding variable, and the value to set
-this variable to if the option is found.  An optional forth element PUSH
+this variable to if the option is found.  An optional fourth element PUSH
 means to push this value onto the list in the variable.")
 
 (defcustom org-group-tags t
@@ -4334,9 +4347,9 @@ related expressions."
 	(let ((value (cdr (assoc "PRIORITIES" alist))))
 	  (pcase (and value (split-string value))
 	    (`(,high ,low ,default . ,_)
-	     (setq-local org-highest-priority (org-priority-to-value high))
-	     (setq-local org-lowest-priority (org-priority-to-value low))
-	     (setq-local org-default-priority (org-priority-to-value default)))))
+	     (setq-local org-priority-highest (org-priority-to-value high))
+	     (setq-local org-priority-lowest (org-priority-to-value low))
+	     (setq-local org-priority-default (org-priority-to-value default)))))
 	;; Scripts.
 	(let ((value (cdr (assoc "OPTIONS" alist))))
 	  (dolist (option value)
@@ -4754,7 +4767,6 @@ This is for getting out of special buffers like capture.")
 (require 'time-date)
 (unless (fboundp 'time-subtract) (defalias 'time-subtract 'subtract-time))
 (require 'easymenu)
-(autoload 'easy-menu-add "easymenu")
 (require 'overlay)
 
 (require 'org-entities)
@@ -4923,7 +4935,7 @@ The following commands are available:
 		   ("9.1" . "26.1")
 		   ("9.2" . "27.1")
 		   ("9.3" . "27.1")
-		   ("9.4" . "28.1")
+		   ("9.4" . "27.2")
 		   ("9.5" . "28.1")))
 
 (defvar org-mode-transpose-word-syntax-table
@@ -4972,8 +4984,6 @@ the rounding returns a past time."
    (org-time-since (* 3600 org-extend-today-until))))
 
 ;;;; Font-Lock stuff, including the activators
-
-(require 'font-lock)
 
 (defconst org-match-sexp-depth 3
   "Number of stacked braces for sub/superscript matching.")
@@ -5305,7 +5315,7 @@ by a #."
 		 (min (point-max) end-of-endline))
 	       '(face org-block-end-line)))
 	    t))
-	 ((member dc1 '("+title:" "+author:" "+email:" "+date:"))
+	 ((member dc1 '("+title:" "+subtitle:" "+author:" "+email:" "+date:"))
 	  (org-remove-flyspell-overlays-in
 	   (match-beginning 0)
 	   (if (equal "+title:" dc1) (match-end 2) (match-end 0)))
@@ -6147,9 +6157,38 @@ Return a non-nil value when toggling is successful."
 
 (defun org-hide-drawer-all ()
   "Fold all drawers in the current buffer."
+  (let ((begin (point-min))
+	(end (point-max)))
+    (org--hide-drawers begin end)))
+
+(defun org-cycle-hide-drawers (state)
+  "Re-hide all drawers after a visibility state change.
+STATE should be one of the symbols listed in the docstring of
+`org-cycle-hook'."
+  (when (derived-mode-p 'org-mode)
+    (cond ((not (memq state '(overview folded contents)))
+	   (let* ((global? (eq state 'all))
+		  (beg (if global? (point-min) (line-beginning-position)))
+		  (end (cond (global? (point-max))
+			     ((eq state 'children) (org-entry-end-position))
+			     (t (save-excursion (org-end-of-subtree t t))))))
+	     (org--hide-drawers beg end)))
+	  ((memq state '(overview contents))
+	   ;; Hide drawers before first heading.
+	   (let ((beg (point-min))
+		 (end (save-excursion
+			(goto-char (point-min))
+			(if (org-before-first-heading-p)
+			    (org-entry-end-position)
+			  (point-min)))))
+	     (when (< beg end)
+	       (org--hide-drawers beg end)))))))
+
+(defun org--hide-drawers (begin end)
+  "Hide all drawers between BEGIN and END."
   (save-excursion
-    (goto-char (point-min))
-    (while (re-search-forward org-drawer-regexp nil t)
+    (goto-char begin)
+    (while (re-search-forward org-drawer-regexp end t)
       (let* ((pair (get-char-property-and-overlay (line-beginning-position)
 						  'invisible))
 	     (o (cdr-safe pair)))
@@ -6163,32 +6202,6 @@ Return a non-nil value when toggling is successful."
 		 (org-hide-drawer-toggle t nil drawer)
 		 ;; Make sure to skip drawer entirely or we might flag it
 		 ;; another time when matching its ending line with
-		 ;; `org-drawer-regexp'.
-		 (goto-char (org-element-property :end drawer)))))))))))
-
-(defun org-cycle-hide-drawers (state)
-  "Re-hide all drawers after a visibility state change.
-STATE should be one of the symbols listed in the docstring of
-`org-cycle-hook'."
-  (when (and (derived-mode-p 'org-mode)
-	     (not (memq state '(overview folded contents))))
-    (let* ((global? (eq state 'all))
-	   (beg (if global? (point-min) (line-beginning-position)))
-	   (end (cond (global? (point-max))
-		      ((eq state 'children) (org-entry-end-position))
-		      (t (save-excursion (org-end-of-subtree t t))))))
-      (save-excursion
-	(goto-char beg)
-	(while (re-search-forward org-drawer-regexp end t)
-	  (pcase (get-char-property-and-overlay (point) 'invisible)
-	    ;; Do not fold already folded drawers.
-	    (`(outline . ,o) (goto-char (overlay-end o)))
-	    (_
-	     (let ((drawer (org-element-at-point)))
-	       (when (memq (org-element-type drawer) '(drawer property-drawer))
-		 (org-hide-drawer-toggle t nil drawer)
-		 ;; Make sure to skip drawer entirely or we might flag
-		 ;; it another time when matching its ending line with
 		 ;; `org-drawer-regexp'.
 		 (goto-char (org-element-property :end drawer)))))))))))
 
@@ -6472,7 +6485,8 @@ Use `\\[org-edit-special]' to edit table.el tables"))
 	(goto-char eos)
 	(outline-next-heading)
 	(when (org-invisible-p) (org-flag-heading nil))))
-     ((and (>= eol eos)
+     ((and (or (>= eol eos)
+	       (not (string-match "\\S-" (buffer-substring eol eos))))
 	   (or has-children
 	       (not (setq children-skipped
 			  org-cycle-skip-children-state-if-no-children))))
@@ -6549,6 +6563,14 @@ With a numeric prefix, show all headlines up to that level."
     (org-overview))
    ((eq org-startup-folded 'content)
     (org-content))
+   ((eq org-startup-folded 'show2levels)
+    (org-content 2))
+   ((eq org-startup-folded 'show3levels)
+    (org-content 3))
+   ((eq org-startup-folded 'show4levels)
+    (org-content 4))
+   ((eq org-startup-folded 'show5levels)
+    (org-content 5))
    ((or (eq org-startup-folded 'showeverything)
 	(eq org-startup-folded nil))
     (org-show-all)))
@@ -6625,19 +6647,23 @@ With numerical argument N, show content up to level N."
   "Adjust the window after a change in outline visibility.
 This function is the default value of the hook `org-cycle-hook'."
   (when (get-buffer-window (current-buffer))
-    (cond
-     ((eq state 'content)  nil)
-     ((eq state 'all)      nil)
-     ((and (eq state 'folded) (eq last-command this-command))
-      (set-window-start nil org-scroll-position-to-restore))
-     ((eq state 'folded) nil)
-     ((eq state 'children)
-      (setq org-scroll-position-to-restore (window-start))
-      (or (org-subtree-end-visible-p) (recenter 1)))
-     ((eq state 'subtree)
-      (when (not (eq last-command this-command))
-	(setq org-scroll-position-to-restore (window-start)))
-      (or (org-subtree-end-visible-p) (recenter 1))))))
+    (let ((repeat (eq last-command this-command)))
+      (unless repeat
+	(setq org-scroll-position-to-restore nil))
+      (cond
+       ((eq state 'content)  nil)
+       ((eq state 'all)      nil)
+       ((and org-scroll-position-to-restore repeat
+	     (eq state 'folded))
+	(set-window-start nil org-scroll-position-to-restore))
+       ((eq state 'folded) nil)
+       ((eq state 'children)
+	(setq org-scroll-position-to-restore (window-start))
+	(or (org-subtree-end-visible-p) (recenter 1)))
+       ((eq state 'subtree)
+	(unless repeat
+	  (setq org-scroll-position-to-restore (window-start)))
+	(or (org-subtree-end-visible-p) (recenter 1)))))))
 
 (defun org-clean-visibility-after-subtree-move ()
   "Fix visibility issues after moving a subtree."
@@ -7392,10 +7418,11 @@ Assume point is at a heading or an inlinetask beginning."
      (org-indent-region (match-beginning 0) (match-end 0)))
    (when (looking-at org-logbook-drawer-re)
      (let ((end-marker  (move-marker (make-marker) (match-end 0)))
-	   (ci (current-indentation)))
-       (while (and (not (> (point) end-marker)) (>= ci diff))
-	 (indent-line-to (+ ci diff))
-	 (forward-line))))
+	   (col (+ (current-indentation) diff)))
+       (when (wholenump col)
+	 (while (< (point) end-marker)
+	   (indent-line-to col)
+	   (forward-line)))))
    (catch 'no-shift
      (when (or (zerop diff) (not (eq org-adapt-indentation t)))
        (throw 'no-shift nil))
@@ -15318,9 +15345,8 @@ used by the agenda files.  If ARCHIVE is `ifmode', do this only if
 			       files)))
     (when org-agenda-skip-unavailable-files
       (setq files (delq nil
-			(mapcar (function
-				 (lambda (file)
-				   (and (file-readable-p file) file)))
+			(mapcar (lambda (file)
+				  (and (file-readable-p file) file))
 				files))))
     (when (or (eq archives t)
 	      (and (eq archives 'ifmode) (eq org-agenda-archives-mode t)))
@@ -16879,7 +16905,8 @@ When ARG is a numeric prefix, show contents of this level."
       (message "Content view to level: %d" arg)
       (org-content (prefix-numeric-value arg2))
       (org-cycle-show-empty-lines t)
-      (setq org-cycle-global-status 'overview)))
+      (setq org-cycle-global-status 'overview)
+      (run-hook-with-args 'org-cycle-hook 'overview)))
    (t (call-interactively 'org-global-cycle))))
 
 (defun org-shiftmetaleft ()
@@ -17938,15 +17965,14 @@ when a numeric prefix argument is given, its value determines the
 number of stars to add."
   (interactive "P")
   (let ((skip-blanks
-	 (function
-	  ;; Return beginning of first non-blank line, starting from
-	  ;; line at POS.
-	  (lambda (pos)
-	    (save-excursion
-	      (goto-char pos)
-	      (while (org-at-comment-p) (forward-line))
-	      (skip-chars-forward " \r\t\n")
-	      (point-at-bol)))))
+	 ;; Return beginning of first non-blank line, starting from
+	 ;; line at POS.
+	 (lambda (pos)
+	   (save-excursion
+	     (goto-char pos)
+	     (while (org-at-comment-p) (forward-line))
+	     (skip-chars-forward " \r\t\n")
+	     (point-at-bol))))
 	beg end toggled)
     ;; Determine boundaries of changes.  If a universal prefix has
     ;; been given, put the list in a region.  If region ends at a bol,
@@ -18210,8 +18236,7 @@ an argument, unconditionally call `org-insert-heading'."
     ("Customize"
      ["Browse Org Group" org-customize t]
      "--"
-     ["Expand This Menu" org-create-customize-menu
-      (fboundp 'customize-menu-create)])
+     ["Expand This Menu" org-create-customize-menu t])
     ["Send bug report" org-submit-bug-report t]
     "--"
     ("Refresh/Reload"
@@ -18457,20 +18482,17 @@ With prefix arg UNCOMPILED, load the uncompiled versions."
   (interactive)
   (org-load-modules-maybe)
   (org-require-autoloaded-modules)
-  (if (fboundp 'customize-menu-create)
-      (progn
-	(easy-menu-change
-	 '("Org") "Customize"
-	 `(["Browse Org group" org-customize t]
-	   "--"
-	   ,(customize-menu-create 'org)
-	   ["Set" Custom-set t]
-	   ["Save" Custom-save t]
-	   ["Reset to Current" Custom-reset-current t]
-	   ["Reset to Saved" Custom-reset-saved t]
-	   ["Reset to Standard Settings" Custom-reset-standard t]))
-	(message "\"Org\"-menu now contains full customization menu"))
-    (error "Cannot expand menu (outdated version of cus-edit.el)")))
+  (easy-menu-change
+   '("Org") "Customize"
+   `(["Browse Org group" org-customize t]
+     "--"
+     ,(customize-menu-create 'org)
+     ["Set" Custom-set t]
+     ["Save" Custom-save t]
+     ["Reset to Current" Custom-reset-current t]
+     ["Reset to Saved" Custom-reset-saved t]
+     ["Reset to Standard Settings" Custom-reset-standard t]))
+  (message "\"Org\"-menu now contains full customization menu"))
 
 ;;;; Miscellaneous stuff
 
@@ -20298,10 +20320,9 @@ This function also checks ancestors of the current headline,
 unless optional argument NO-INHERITANCE is non-nil."
   (cond
    ((org-before-first-heading-p) nil)
-   ((let ((tags (nth 5 (org-heading-components))))
+   ((let ((tags (org-get-tags nil 'local)))
       (and tags
-	   (let ((case-fold-search nil))
-	     (string-match-p org-archive-tag tags)))))
+	   (cl-some (apply-partially #'string= org-archive-tag) tags))))
    (no-inheritance nil)
    (t
     (save-excursion (and (org-up-heading-safe) (org-in-archived-heading-p))))))
@@ -20424,10 +20445,10 @@ move point."
 Return t when a child was found.  Otherwise don't move point and
 return nil."
   (let (level (pos (point)) (re org-outline-regexp-bol))
-    (when (ignore-errors (org-back-to-heading t))
-      (setq level (outline-level))
+    (when (org-back-to-heading-or-point-min t)
+      (setq level (org-outline-level))
       (forward-char 1)
-      (if (and (re-search-forward re nil t) (> (outline-level) level))
+      (if (and (re-search-forward re nil t) (> (org-outline-level) level))
 	  (progn (goto-char (match-beginning 0)) t)
 	(goto-char pos) nil))))
 
@@ -21229,9 +21250,5 @@ Started from `gnus-info-find-node'."
 (provide 'org)
 
 (run-hooks 'org-load-hook)
-
-;; Local variables:
-;; generated-autoload-file: "org-loaddefs.el"
-;; End:
 
 ;;; org.el ends here

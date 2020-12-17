@@ -12,6 +12,12 @@ Please send Org bug reports to mailto:emacs-orgmode@gnu.org.
 
 * Version 9.5 (not yet released)
 ** New options and settings
+*** Option ~org-hidden-keywords~ now also applies to #+SUBTITLE:
+
+The option ~org-hidden-keywords~ previously applied
+to #+TITLE:, #+AUTHOR:, #+DATE:, and #+EMAIL:.  Now it can also be
+used to hide the #+SUBTITLE: keyword.
+
 *** New formatting directive ~%L~ for org-capture
 
 The new ~%L~ formatting directive contains the bare link target, and
@@ -34,6 +40,46 @@ providing =file-desc= without an argument results in the result of
 omit a file description was to omit the header argument entirely,
 which made it difficult/impossible to provide a default value for
 =file-desc=.
+
+*** New option to set ~org-link-file-path-type~ to a function
+
+~org-link-file-path-type~ can now be set to a function that takes the
+full filename as an argument and returns the path to link to.
+
+For example, if you use ~project.el~, you can set this function to use
+relative links within a project as follows:
+
+#+begin_src emacs-lisp
+(setq (org-link-file-path-type
+       (lambda (path)
+         (let* ((proj (project-current))
+                (root (if proj (project-root proj) default-directory)))
+           (if (string-prefix-p (expand-file-name root) path)
+               (file-relative-name path)
+             (abbreviate-file-name path))))))
+#+end_src
+
+*** New options and new behavior for babel LaTeX SVG image files
+
+Org babel now uses a two-stage process for converting latex source
+blocks to SVG image files (when the extension of the output file is
+~.svg~).  The first stage in the process converts the latex block into
+a PDF file, which is then converted into an SVG file in the second
+stage.  The TeX->PDF part uses the existing infrastructure for
+~org-babel-latex-tex-to-pdf~.  The PDF->SVG part uses a command
+specified in a new customization,
+~org-babel-latex-pdf-svg-process~. By default, this uses inkscape for
+conversion, but since it is fully customizable, any other command can
+be used in its place. For instance, dvisvgm might be used here. This
+two-part processing replaces the previous use of htlatex to process
+LaTeX directly to SVG (htlatex is still used for HTML conversion).
+
+Conversion to SVG exposes a number of additional customizations that
+give the user full control over the contents of the latex source
+block. ~org-babel-latex-preamble~, ~org-babel-latex-begin-env~ and
+~org-babel-latex-end-env~ are new customization options added to allow
+the user to specify the preamble and code that preceedes and proceeds
+the contents of the source block.
 
 ** New features
 *** =ob-python= improvements to =:return= header argument 
@@ -87,6 +133,29 @@ package, to convert pandas Dataframes into orgmode tables:
 | 1 | 2 | 5 |
 | 2 | 3 | 6 |
 #+end_src
+
+*** New startup options =#+startup: show<n>levels=
+
+These startup options complement the existing =overview=, =content=,
+=showall=, =showeverything= with a way to start the document with n
+levels shown, where n goes from 2 to 5.
+
+*** New =u= table formula flag to enable Calc units simplification mode
+
+A new =u= mode flag for Calc formulas in Org tables has been added to
+enable Calc units simplification mode.
+
+** Miscellaneous
+*** =org-goto-first-child= now works before first heading
+
+When point is before first heading =org-goto-first-child= will move
+point to the first child heading, or return nil if no heading exist
+in buffer.  This is in line with the fact that everything before first
+heading is regarded as outline level 0, i.e. the parent level of all
+headings in the buffer.
+
+Previously =org-goto-first-child= would do nothing before first
+heading, except return nil.
 
 * Version 9.4
 ** Incompatible changes
@@ -310,6 +379,10 @@ explicitly:
 #+begin_src emacs-lisp
 (add-hook 'org-mode-hook (lambda () (electric-indent-local-mode -1)))
 #+end_src
+
+Alternatively, if you wish to keep =RET= as the "smart-return" key,
+but dislike Org's default indentation of sections, you may prefer to
+customize ~org-adapt-indentation~ to either =nil= or ='headline-data=.
 
 *** =ob-C.el= allows the inclusion of non-system header files
 
