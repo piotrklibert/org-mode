@@ -1,6 +1,6 @@
 ;;; ob-latex.el --- Babel Functions for LaTeX        -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2009-2020 Free Software Foundation, Inc.
+;; Copyright (C) 2009-2021 Free Software Foundation, Inc.
 
 ;; Author: Eric Schulte
 ;; Keywords: literate programming, reproducible research
@@ -84,7 +84,7 @@ It takes 1 argument which is the parameters of the source block."
 (defcustom org-babel-latex-begin-env
   (lambda (_)
     "\\begin{document}")
-  "Closure which evaluates at runtime to the begin part of the document environment.
+  "Function that evaluates to the begin part of the document environment.
 
 It takes 1 argument which is the parameters of the source block.
 This allows adding additional code that will be ignored when
@@ -105,7 +105,7 @@ exporting the literal LaTeX source."
 
 (defcustom org-babel-latex-pdf-svg-process
   "inkscape --pdf-poppler %f -T -l -o %O"
-  "Command used to convert a PDF file to an SVG file when executing a latex source block."
+  "Command to convert a PDF file to an SVG file."
   :group 'org-babel
   :type 'string)
 
@@ -151,23 +151,23 @@ This function is called by `org-babel-execute-src-block'."
           (let ((org-format-latex-header
 		 (concat org-format-latex-header "\n"
 			 (mapconcat #'identity headers "\n"))))
-	   (org-create-formula-image
-            body out-file org-format-latex-options in-buffer)))
+	    (org-create-formula-image
+             body out-file org-format-latex-options in-buffer)))
 	 ((string= "svg" extension)
 	  (with-temp-file tex-file
-		 (insert (concat (funcall org-babel-latex-preamble params)
-			 (mapconcat #'identity headers "\n")
-			 (funcall org-babel-latex-begin-env params)
-			 body
-			 (funcall org-babel-latex-end-env params))))
+	    (insert (concat (funcall org-babel-latex-preamble params)
+			    (mapconcat #'identity headers "\n")
+			    (funcall org-babel-latex-begin-env params)
+			    body
+			    (funcall org-babel-latex-end-env params))))
 	  (let ((tmp-pdf (org-babel-latex-tex-to-pdf tex-file)))
-                  (let* ((log-buf (get-buffer-create "*Org Babel LaTeX Output*"))
-                         (err-msg "org babel latex failed")
-                         (img-out (org-compile-file
-	                           tmp-pdf
-                                   (list org-babel-latex-pdf-svg-process)
-                                   extension err-msg log-buf)))
-                    (shell-command (format "mv %s %s" img-out out-file)))))
+            (let* ((log-buf (get-buffer-create "*Org Babel LaTeX Output*"))
+                   (err-msg "org babel latex failed")
+                   (img-out (org-compile-file
+	                     tmp-pdf
+                             (list org-babel-latex-pdf-svg-process)
+                             extension err-msg log-buf)))
+              (shell-command (format "mv %s %s" img-out out-file)))))
          ((string-suffix-p ".tikz" out-file)
 	  (when (file-exists-p out-file) (delete-file out-file))
 	  (with-temp-file out-file

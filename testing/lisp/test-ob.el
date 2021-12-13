@@ -16,7 +16,7 @@
 ;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; Code:
 
@@ -177,6 +177,22 @@ should still return the link."
     (should (string= ": 4" (buffer-substring
 			    (point-at-bol)
 			    (point-at-eol))))))
+
+(ert-deftest test-ob/cons-cell-as-variable ()
+  "Test that cons cell can be assigned as variable."
+  (org-test-with-temp-text "
+
+#+name: cons
+#+begin_src emacs-lisp
+  (cons 1 2)
+#+end_src
+
+#+begin_src emacs-lisp :var x=cons
+  x
+#+end_src"
+
+    (org-babel-next-src-block 2)
+    (should (equal (cons 1 2) (org-babel-execute-src-block)))))
 
 (ert-deftest test-ob/multi-line-header-arguments ()
   "Test that multi-line header arguments and can be read."
@@ -1161,30 +1177,6 @@ echo \"test\"
       (org-babel-execute-maybe)
       (should (re-search-forward "=\"x\"=" nil t))
       (forward-line))))
-
-(ert-deftest test-ob/commented-last-block-line-with-var ()
-  (org-test-with-temp-text-in-file "
-#+begin_src emacs-lisp :var a=1
-;;
-#+end_src"
-    (org-babel-next-src-block)
-    (org-babel-execute-maybe)
-    (re-search-forward "\\#\\+results:" nil t)
-    (forward-line)
-    (should (string=
-	     ""
-	     (buffer-substring-no-properties (point-at-bol) (point-at-eol)))))
-  (org-test-with-temp-text-in-file "
-#+begin_src emacs-lisp :var a=2
-2;;
-#+end_src"
-    (org-babel-next-src-block)
-    (org-babel-execute-maybe)
-    (re-search-forward "\\#\\+results:" nil t)
-    (forward-line)
-    (should (string=
-	     ": 2"
-	     (buffer-substring-no-properties (point-at-bol) (point-at-eol))))))
 
 (defun test-ob-verify-result-and-removed-result (result buffer-text)
   "Test helper function to test `org-babel-remove-result'.

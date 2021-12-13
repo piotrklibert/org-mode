@@ -1,6 +1,6 @@
 ;;; org-plot.el --- Support for Plotting from Org -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2008-2020 Free Software Foundation, Inc.
+;; Copyright (C) 2008-2021 Free Software Foundation, Inc.
 ;;
 ;; Author: Eric Schulte <schulte dot eric at gmail dot com>
 ;; Maintainer: TEC <tecosaur@gmail.com>
@@ -190,29 +190,31 @@ and dependent variables."
     row-vals))
 
 (defun org--plot/values-stats (nums &optional hard-min hard-max)
-  "From a list of NUMS return a plist containing some rudamentry statistics on the
-values, namely regarding the range."
+  "Rudimentary statistics about NUMS, useful for guessing axis ticks.
+If HARD-MIN or HARD-MAX are set, they will be used instead of the min/max
+of the NUMS."
   (let* ((minimum (or hard-min (apply #'min nums)))
 	 (maximum (or hard-max (apply #'max nums)))
 	 (range (- maximum minimum))
 	 (rangeOrder (if (= range 0) 0
-		       (ceiling (- 1 (log10 range)))))
+		       (ceiling (- 1 (log range 10)))))
 	 (range-factor (expt 10 rangeOrder))
 	 (nice-min (if (= range 0) (car nums)
 		     (/ (float (floor (* minimum range-factor))) range-factor)))
 	 (nice-max (if (= range 0) (car nums)
 		     (/ (float (ceiling (* maximum range-factor))) range-factor))))
     `(:min ,minimum :max ,maximum :range ,range
-      :range-factor ,range-factor
-      :nice-min ,nice-min :nice-max ,nice-max :nice-range ,(- nice-max nice-min))))
+           :range-factor ,range-factor
+           :nice-min ,nice-min :nice-max ,nice-max :nice-range ,(- nice-max nice-min))))
 
 (defun org--plot/sensible-tick-num (table &optional hard-min hard-max)
-  "From a the values in a TABLE of data, attempt to guess an appropriate number of ticks."
+  "From a the values in a TABLE of data, guess an appropriate number of ticks.
+If HARD-MIN and HARD-MAX can be used to fix the ends of the axis."
   (let* ((row-data
 	  (mapcar (lambda (row) (org--plot/values-stats
-			    (mapcar #'string-to-number (cdr row))
-			    hard-min
-			    hard-max)) table))
+			         (mapcar #'string-to-number (cdr row))
+			         hard-min
+			         hard-max)) table))
 	 (row-normalised-ranges (mapcar (lambda (r-data)
 					  (let ((val (round (*
 							     (plist-get r-data :range-factor)
@@ -227,40 +229,41 @@ values, namely regarding the range."
     (apply #'* (org--plot/nice-frequency-pick weighted-factors))))
 
 (defun org--plot/nice-frequency-pick (frequencies)
-  "From a list of frequences, try to sensibly pick a sample of the most frequent."
-  ;; TODO this mosly works decently, but counld do with some tweaking to work more consistently.
-  (case (length frequencies)
-	(1 (list (car (nth 0 frequencies))))
-	(2 (if (<= 3 (/ (cdr (nth 0 frequencies))
-			(cdr (nth 1 frequencies))))
-	       (make-list 2
-			  (car (nth 0 frequencies)))
-	     (list (car (nth 0 frequencies))
-		   (car (nth 1 frequencies)))))
-	(t
-	 (let* ((total-count (apply #'+ (mapcar #'cdr frequencies)))
-		(n-freq (mapcar (lambda (freq) `(,(car freq) . ,(/ (float (cdr freq)) total-count))) frequencies))
-		(f-pick (list (car (car n-freq))))
-		(1-2-ratio (/ (cdr (nth 0 n-freq))
-			      (cdr (nth 1 n-freq))))
-		(2-3-ratio (/ (cdr (nth 1 n-freq))
-			      (cdr (nth 2 n-freq))))
-		(1-3-ratio (* 1-2-ratio 2-3-ratio))
-		(1-val (car (nth 0 n-freq)))
-		(2-val (car (nth 1 n-freq)))
-		(3-val (car (nth 2 n-freq))))
-	   (when (> 1-2-ratio 4) (push 1-val f-pick))
-	   (when (and (< 1-2-ratio 2-val)
-		      (< (* (apply #'* f-pick) 2-val) 30))
-	     (push 2-val f-pick))
-	   (when (and (< 1-3-ratio 3-val)
-		      (< (* (apply #'* f-pick) 3-val) 30))
-	     (push 3-val f-pick))
-	   f-pick))))
+  "From a list of FREQUENCIES, try to sensibly pick a sample of the most frequent."
+  ;; TODO this mosly works decently, but could do with some tweaking to work more consistently.
+  (cl-case (length frequencies)
+    (1 (list (car (nth 0 frequencies))))
+    (2 (if (<= 3 (/ (cdr (nth 0 frequencies))
+		    (cdr (nth 1 frequencies))))
+	   (make-list 2
+		      (car (nth 0 frequencies)))
+	 (list (car (nth 0 frequencies))
+	       (car (nth 1 frequencies)))))
+    (t
+     (let* ((total-count (apply #'+ (mapcar #'cdr frequencies)))
+	    (n-freq (mapcar (lambda (freq) `(,(car freq) . ,(/ (float (cdr freq)) total-count))) frequencies))
+	    (f-pick (list (car (car n-freq))))
+	    (1-2-ratio (/ (cdr (nth 0 n-freq))
+			  (cdr (nth 1 n-freq))))
+	    (2-3-ratio (/ (cdr (nth 1 n-freq))
+			  (cdr (nth 2 n-freq))))
+	    (1-3-ratio (* 1-2-ratio 2-3-ratio))
+	    (1-val (car (nth 0 n-freq)))
+	    (2-val (car (nth 1 n-freq)))
+	    (3-val (car (nth 2 n-freq))))
+       (when (> 1-2-ratio 4) (push 1-val f-pick))
+       (when (and (< 1-2-ratio 2-val)
+		  (< (* (apply #'* f-pick) 2-val) 30))
+	 (push 2-val f-pick))
+       (when (and (< 1-3-ratio 3-val)
+		  (< (* (apply #'* f-pick) 3-val) 30))
+	 (push 3-val f-pick))
+       f-pick))))
 
 (defun org--plot/merge-alists (function default alist1 alist2 &rest alists)
-  "Using FUNCTION, combine the elements of all given ALISTS. When an element is
-only present in one alist, DEFAULT is used as the second argument for the FUNCTION."
+  "Using FUNCTION, combine the elements of ALIST1, ALIST2 and any other ALISTS.
+When an element is only present in one alist, DEFAULT is used as the second
+argument for the FUNCTION."
   (when (> (length alists) 0)
     (setq alist2 (apply #'org--plot/merge-alists function default alist2 alists)))
   (cl-flet ((keys (alist) (mapcar #'car alist))
@@ -270,13 +273,14 @@ only present in one alist, DEFAULT is used as the second argument for the FUNCTI
 	     (cons k (funcall function (lookup k alist1) (lookup k alist2))))))
 
 (defun org--plot/item-frequencies (values &optional normalise)
-  "Return an alist indicating the frequency of values in VALUES list."
+  "Return an alist indicating the frequency of values in VALUES list.
+When NORMALISE is non-nil, the count is divided by the number of values."
   (let ((normaliser (if normalise (float (length values)) 1)))
     (cl-loop for (n . m) in (seq-group-by #'identity values)
 	     collect (cons n (/ (length m) normaliser)))))
 
 (defun org--plot/prime-factors (value)
-  "Return the prime decomposition of VALUE, e.g. for 12, '(3 2 2)"
+  "Return the prime decomposition of VALUE, e.g. for 12, '(3 2 2)."
   (let ((factors '(1)) (i 1))
     (while (/= 1 value)
       (setq i (1+ i))
@@ -288,10 +292,11 @@ only present in one alist, DEFAULT is used as the second argument for the FUNCTI
     (cl-subseq factors 0 -1)))
 
 (defcustom org-plot/gnuplot-script-preamble ""
-  "String or function which provides content to be inserted into the GNUPlot
-script before the plot command. Not that this is in addition to, not instead of
-other content generated in `org-plot/gnuplot-script'.
-If a function, it is called with the plot type as the argument."
+  "String of function to be inserted before the gnuplot plot command is run.
+
+Note that this is in addition to, not instead of other content generated in
+`org-plot/gnuplot-script'.  If a function, it is called with the plot type as
+the argument, and must return a string to be used."
   :group 'org-plot
   :type '(choice string function))
 
@@ -304,7 +309,8 @@ If a function, it is called with the plot type as the argument."
 		 (with (if (eq type 'grid) 'pm3d (plist-get params :with)))
 		 (ind (plist-get params :ind))
 		 (deps (if (plist-member params :deps) (plist-get params :deps)))
-		 (text-ind (plist-get params :textind))
+		 (text-ind (or (plist-get params :textind)
+                               (eq (plist-get params :with) 'histograms)))
 		 (col-labels (plist-get params :labels))
 		 res)
 	    (dotimes (col num-cols res)
@@ -348,37 +354,45 @@ If a function, it is called with the plot type as the argument."
     (radar :plot-func
 	   (lambda (table _data-file _num-cols params plot-str)
 	     (list (org--plot/radar table params)))))
-  "List of plists describing the avalible plot types.
-The car is the type name, and the property :plot-func must be set.
-The value of :plot-func is a lambda which yields plot-lines
-(a list of strings) as the cdr.
+  "List of plists describing the available plot types.
+The car is the type name, and the property :plot-func must be
+set.  The value of :plot-func is a lambda which yields plot-lines
+\(a list of strings) as the cdr.
 
-All lambda functions have the parameters of `org-plot/gnuplot-script' and PLOT-STR passed to them.
-i.e. they are called with the following signature: (TABLE DATA-FILE NUM-COLS PARAMS PLOT-STR)
+All lambda functions have the parameters of
+`org-plot/gnuplot-script' and PLOT-STR passed to them.  i.e. they
+are called with the following signature: (TABLE DATA-FILE
+NUM-COLS PARAMS PLOT-STR)
 
 Potentially useful parameters in PARAMS include:
  :set :line :map :title :file :ind :timeind :timefmt :textind
  :deps :labels :xlabels :ylabels :xmin :xmax :ymin :ymax :ticks
 
-In addition to :plot-func, the following optional properties may be set.
+In addition to :plot-func, the following optional properties may
+be set.
 
 - :plot-cmd - A gnuplot command appended to each plot-line.
-  Accepts string or nil. Default value: nil.
+  Accepts string or nil.  Default value: nil.
 
 - :check-ind-type - Whether the types of ind values should be checked.
   Accepts boolean.
 
 - :plot-str - the formula string passed to :plot-func as PLOT-STR
-  Accepts string. Default value: \"'%s' using %s%d%s with %s title '%s'\"
+  Accepts string.  Default value: \"'%s' using %s%d%s with %s title '%s'\"
 
-- :data-dump - Function to dump the table to a datafile for ease of use.
-  Accepts lambda function. Default lambda body: (org-plot/gnuplot-to-data table data-file params)
+- :data-dump - Function to dump the table to a datafile for ease of
+  use.
 
-- :plot-pre - Gnuplot code to be inserted early into the script, just after term and output have been set.
-   Accepts string, nil, or lambda function which returns string or nil. Defaults to nil.
-"
+  Accepts lambda function.  Default lambda body:
+  (org-plot/gnuplot-to-data table data-file params)
+
+- :plot-pre - Gnuplot code to be inserted early into the script, just
+  after term and output have been set.
+
+   Accepts string, nil, or lambda function which returns string
+   or nil.  Defaults to nil."
   :group 'org-plot
-  :type '(alist :value-type (symbol group)))
+  :type 'alist)
 
 (defvar org--plot/radar-template
   "### spider plot/chart with gnuplot
@@ -391,7 +405,7 @@ set angles degree
 set key bmargin center horizontal
 unset border
 
-# Load data and settup
+# Load data and setup
 load \"%s\"
 
 # General settings
@@ -472,35 +486,36 @@ EOD
 ")
 
 (defun org--plot/radar (table params)
+  "Create gnuplot code for a radar plot of TABLE with PARAMS."
   (let* ((data
-	  (concat "\"" (s-join "\" \"" (plist-get params :labels)) "\""
+	  (concat "\"" (mapconcat #'identity (plist-get params :labels) "\" \"") "\""
 		  "\n"
-		  (s-join "\n"
-			  (mapcar (lambda (row)
-				    (format
-				     "\"%s\" %s"
-				     (car row)
-				     (s-join " " (cdr row))))
-				  (append table (list (car table)))))))
+		  (mapconcat (lambda (row)
+			       (format
+				"\"%s\" %s"
+				(car row)
+				(mapconcat #'identity (cdr row) " ")))
+			     (append table (list (car table)))
+			     "\n")))
 	 (ticks (or (plist-get params :ticks)
 		    (org--plot/sensible-tick-num table
 						 (plist-get params :ymin)
 						 (plist-get params :ymax))))
 	 (settings
-	  (s-join "\n"
-		  (mapcar (lambda (row)
-			    (let ((data (org--plot/values-stats
-					 (mapcar #'string-to-number (cdr row)))))
-			      (format
-			       "\"%s\" %s %s %s"
-			       (car row)
-			       (or (plist-get params :ymin)
-				   (plist-get data :nice-min))
-			       (or (plist-get params :ymax)
-				   (plist-get data :nice-max))
-			       (if (eq ticks 0) 2 ticks)
-			       )))
-			  (append table (list (car table))))))
+	  (mapconcat (lambda (row)
+		       (let ((data (org--plot/values-stats
+				    (mapcar #'string-to-number (cdr row)))))
+			 (format
+			  "\"%s\" %s %s %s"
+			  (car row)
+			  (or (plist-get params :ymin)
+			      (plist-get data :nice-min))
+			  (or (plist-get params :ymax)
+			      (plist-get data :nice-max))
+			  (if (eq ticks 0) 2 ticks)
+			  )))
+		     (append table (list (car table)))
+		     "\n"))
 	 (setup-file (make-temp-file "org-plot-setup")))
     (let ((coding-system-for-write 'utf-8))
       (write-region (format org--plot/radar-setup-template data settings) nil setup-file nil :silent))
@@ -523,25 +538,20 @@ If a function, it is called with the plot type as the argument."
   :type '(choice string function))
 
 (defun org-plot/gnuplot-script (table data-file num-cols params &optional preface)
-  "Write a gnuplot script to DATA-FILE respecting the options set in PARAMS.
+  "Write a gnuplot script for TABLE to DATA-FILE respecting options in PARAMS.
 NUM-COLS controls the number of columns plotted in a 2-d plot.
 Optional argument PREFACE returns only option parameters in a
 manner suitable for prepending to a user-specified script."
   (let* ((type-name (plist-get params :plot-type))
 	 (type (cdr (assoc type-name org-plot/preset-plot-types))))
     (unless type
-      (user-error "Org-plot type `%s' is undefined." type-name))
+      (user-error "Org-plot type `%s' is undefined" type-name))
     (let* ((sets (plist-get params :set))
 	   (lines (plist-get params :line))
-	   (map (plist-get params :map))
 	   (title (plist-get params :title))
 	   (file (plist-get params :file))
-	   (ind (plist-get params :ind))
 	   (time-ind (plist-get params :timeind))
 	   (timefmt (plist-get params :timefmt))
-	   (text-ind (plist-get params :textind))
-	   (deps (if (plist-member params :deps) (plist-get params :deps)))
-	   (col-labels (plist-get params :labels))
 	   (x-labels (plist-get params :xlabels))
 	   (y-labels (plist-get params :ylabels))
 	   (plot-str (or (plist-get type :plot-str)
@@ -561,7 +571,7 @@ manner suitable for prepending to a user-specified script."
 			       org-plot/gnuplot-term-extra
 			     (funcall org-plot/gnuplot-term-extra type))))
       (when file ; output file
-	(funcall ats (format "set output '%s'" file)))
+	(funcall ats (format "set output '%s'" (expand-file-name file))))
 
       (when plot-pre
 	(funcall ats (funcall plot-pre table data-file num-cols params plot-str)))
@@ -607,6 +617,13 @@ manner suitable for prepending to a user-specified script."
 				    ",\\\n    "))))
       script)))
 
+(defun org-plot/redisplay-img-in-buffer (img-file)
+  "Find any overlays for IMG-FILE in the current Org buffer, and refresh them."
+  (dolist (img-overlay org-inline-image-overlays)
+    (when (string= img-file (plist-get (cdr (overlay-get img-overlay 'display)) :file))
+      (when (file-exists-p img-file)
+        (image-refresh (overlay-get img-overlay 'display))))))
+
 ;;-----------------------------------------------------------------------------
 ;; facade functions
 ;;;###autoload
@@ -621,22 +638,25 @@ line directly before or after the table."
     (when (get-buffer "*gnuplot*") ; reset *gnuplot* if it already running
       (with-current-buffer "*gnuplot*"
 	(goto-char (point-max))))
-    (org-plot/goto-nearest-table)
-    ;; Set default options.
-    (dolist (pair org-plot/gnuplot-default-options)
-      (unless (plist-member params (car pair))
-	(setf params (plist-put params (car pair) (cdr pair)))))
-    ;; Collect options.
-    (save-excursion (while (and (equal 0 (forward-line -1))
-				(looking-at "[[:space:]]*#\\+"))
-		      (setf params (org-plot/collect-options params))))
+    (save-excursion
+      (org-plot/goto-nearest-table)
+      ;; Set default options.
+      (dolist (pair org-plot/gnuplot-default-options)
+        (unless (plist-member params (car pair))
+          (setf params (plist-put params (car pair) (cdr pair)))))
+      ;; Collect options.
+      (while (and (equal 0 (forward-line -1))
+                  (looking-at "[[:space:]]*#\\+"))
+        (setf params (org-plot/collect-options params))))
     ;; collect table and table information
     (let* ((data-file (make-temp-file "org-plot"))
-	   (table (let ((tbl (org-table-to-lisp)))
+           (table (let ((tbl (save-excursion
+                               (org-plot/goto-nearest-table)
+                               (org-table-to-lisp))))
 		    (when (pcase (plist-get params :transpose)
-			    ('y   t)
-			    ('yes t)
-			    ('t   t))
+			    (`y   t)
+			    (`yes t)
+			    (`t   t))
 		      (if (not (memq 'hline tbl))
 			  (setq tbl (apply #'cl-mapcar #'list tbl))
 			;; When present, remove hlines as they can't (currentily) be easily transposed.
@@ -650,7 +670,7 @@ line directly before or after the table."
 			org-plot/preset-plot-types)))
 
       (unless type
-	(user-error "Org-plot type `%s' is undefined." type-name))
+	(user-error "Org-plot type `%s' is undefined" (plist-get params :plot-type)))
 
       (run-with-idle-timer 0.1 nil #'delete-file data-file)
       (when (eq (cadr table) 'hline)
@@ -662,9 +682,10 @@ line directly before or after the table."
 				  (looking-at "[[:space:]]*#\\+"))
 			(setf params (org-plot/collect-options params))))
       ;; Dump table to datafile
-      (if-let ((dump-func (plist-get type :data-dump)))
-	  (funcall dump-func table data-file num-cols params)
-	(org-plot/gnuplot-to-data table data-file params))
+      (let ((dump-func (plist-get type :data-dump)))
+        (if dump-func
+	    (funcall dump-func table data-file num-cols params)
+	  (org-plot/gnuplot-to-data table data-file params)))
       ;; Check type of ind column (timestamp? text?)
       (when (plist-get params :check-ind-type)
 	(let* ((ind (1- (plist-get params :ind)))
@@ -692,9 +713,14 @@ line directly before or after the table."
 	  (insert (org-plot/gnuplot-script table data-file num-cols params)))
 	;; Graph table.
 	(gnuplot-mode)
-	(gnuplot-send-buffer-to-gnuplot))
+        (condition-case nil
+            (gnuplot-send-buffer-to-gnuplot)
+          (buffer-read-only nil)))
       ;; Cleanup.
-      (bury-buffer (get-buffer "*gnuplot*")))))
+      (bury-buffer (get-buffer "*gnuplot*"))
+      ;; Refresh any displayed images
+      (when (plist-get params :file)
+        (org-plot/redisplay-img-in-buffer (expand-file-name (plist-get params :file)))))))
 
 (provide 'org-plot)
 

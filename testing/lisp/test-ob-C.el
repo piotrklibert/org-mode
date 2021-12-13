@@ -16,7 +16,7 @@
 ;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; Code:
 (unless (featurep 'ob-C)
@@ -183,4 +183,5 @@
 				 ("Friday" "friday"))
 			       (org-babel-execute-src-block))))))
 
+(provide 'test-ob-C)
 ;;; test-ob-C.el ends here

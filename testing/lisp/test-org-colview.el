@@ -15,7 +15,7 @@
 ;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; Code:
 
@@ -991,6 +991,7 @@
 	(let ((org-columns-default-format "%A{min}")
 	      (org-columns-ellipses "..")
 	      (org-inlinetask-min-level 15))
+          (org-element-update-syntax)
 	  (org-columns))
 	(get-char-property (point-min) 'org-columns-value)))))
   ;; Handle `org-columns-modify-value-for-display-function', even with
